@@ -6187,11 +6187,4 @@ function getEntitiesList() {
     zwnj: "‌",
 }}
 
-function consolelog (...inputs) {
-  if (!exports.production
-  &&  !exports.suppress
-  &&  !exports.silent)
-      console.log(...inputs);
-}
-
 })));
