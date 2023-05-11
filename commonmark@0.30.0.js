@@ -13,8 +13,8 @@
 const {createModuleCommonJS,
        getExport, unwrapExports, importDefault}
                             = factoryCommonJS();
-var CODE_INDENT =
-   (typeof exports.codeIndent === "number")
+var CODE_INDENT
+ = (typeof exports.codeIndent === "number")
          ? exports.codeIndent : 4;
 
 function isContainer (node) {
@@ -63,29 +63,9 @@ var Node = function (nodeType, sourcepos) {
     this._onExit = null;
 };
 
-var text = function(s) {
-    var node = new Node("text");
-    node._literal = s;
-    return node;
-};
 
- /////////////////////////////////////////////
-//  normalize a reference in reference link 
-/*  parse string content in block
- -  remove []s,
- -  trim,
- -  collapse internal space,
- -  unicode case fold
-/// … see commonmark/commonmark.js#168 */
-var normalizeReference = function(string) {
-    return string
-        .slice(1, string.length - 1)
-        .trim()
-        .replace(/[ \t\r\n]+/, " ")
-        .toLowerCase()
-        .toUpperCase();
-};
-
+ //////////////////////////////////////////
+// html tag attributes renderer function
 function attrs (node) {
     var att = [];
     if (this.options.sourcepos) {
@@ -106,6 +86,34 @@ function attrs (node) {
     return att;
 }
 
+
+ //////////////////////////
+//  text parser function
+var text = function(s) {
+    var node = new Node("text");
+    node._literal = s;
+    return node;
+};
+
+
+  ////////////////////////////////////////////
+ // normalize a reference in reference link 
+/*  parse string content in block
+ -  remove []s,
+ -  trim,
+ -  collapse internal space,
+ -  unicode case fold
+ …  see commonmark/commonmark.js#168
+///                                       */
+var normalizeReference = function(string) {
+    return string
+        .slice(1, string.length - 1)
+        .trim()
+        .replace(/[ \t\r\n]+/, " ")
+        .toLowerCase()
+        .toUpperCase();
+};
+
 ////////////////////////////////////////////////
 
 var { entities, legacy, xml, code_points,
@@ -113,7 +121,62 @@ var { entities, legacy, xml, code_points,
       encode_unsafe: encodeUnsafe,
       encode,
       decode,
-      decodeHTML } = exportLib();
+      decodeHTML,
+
+      unescapeChar,
+      unescapeString,
+      normalizeURI,
+      replaceUnsafeChar,
+      escapeXml,
+
+      polyfills } = exportLib();
+
+var fromCodePoint = polyfills.fromCodePoint;
+                    polyfills.stringRepeat();
+
+var unescapeChar = function (s) {
+    if (s.charCodeAt(0) === C_BACKSLASH)
+        return s.charAt(1);
+    else
+        return lib.decodeHTML(s);
+};
+
+var unescapeString = function (s) {
+    if (!rx.backslashOrAmp.test(s))
+        return s;
+    else
+        return s.replace(rx.entityOrEscapedChar, unescapeChar);
+};
+
+var normalizeURI = function(uri) {
+    try {
+        return encodeUnsafe(uri);
+    } catch (err) {
+        return uri;
+    }
+};
+
+var replaceUnsafeChar = function(s) {
+    switch (s) {
+        case "&":
+            return "&amp;";
+        case "<":
+            return "&lt;";
+        case ">":
+            return "&gt;";
+        case '"':
+            return "&quot;";
+        default:
+            return s;
+    }
+};
+
+var escapeXml = function (s) {
+    if (!rx.xmlSpecial.test(s))
+        return s;
+    else
+        return s.replace(rx.xmlSpecial, replaceUnsafeChar);
+};
 
 Object.defineProperty(exports, '__esModule',
                               { value: true });
@@ -363,7 +426,7 @@ var C_SPACE = 32;
 var C_OPEN_BRACKET = 91;
 
 const rx = (function regularExpressions() {
-  let { htmlTag, backslashOrAmp, entityOrEscapedChar, xmlSpecial, linkDestination, escapable, entityHere, ticks, ticksHere, ellipses, dash, emailAutolink, autolink, linkTitle, linkLabel, whitespaceChar, unicodeWhitespaceChar, finalSpace, initialSpace, spaceAtEndOfLine, spnl, nonSpace, punctuation, decodeHtml, xmlTag, main, num, nonAscii, htmlBlockOpen, htmlBlockClose, thematicBreak, orderedListMarker, bulletListMarker, ATXHeadingMarker, codeFence, closingCodeFence, setextHeadingLine, unsafeProtocol, safeDataProtocol, maybeSpecial }
+  let { htmlTag, backslashOrAmp, entityOrEscapedChar, xmlSpecial, linkDestination, escapable, entityHere, ticks, ticksHere, ellipses, dash, emailAutolink, autolink, linkTitle, linkLabel, whitespaceChar, unicodeWhitespaceChar, finalSpace, initialSpace, spaceAtEndOfLine, spnl, nonSpace, punctuation, decodeHtml, xmlTag, main, num, nonAscii, htmlBlockOpen, htmlBlockClose, thematicBreak, orderedListMarker, bulletListMarker, ATXHeadingMarker, codeFence, closingCodeFence, setextHeadingLine, lineEnding, unsafeProtocol, safeDataProtocol, maybeSpecial }
     = getRegularExpressions();
  
  //////////////////////////////
@@ -409,6 +472,7 @@ const rx = (function regularExpressions() {
                     codeFence,
              closingCodeFence,
             setextHeadingLine,
+                   lineEnding,
 
                unsafeProtocol,
              safeDataProtocol,
@@ -424,6 +488,7 @@ const rx = (function regularExpressions() {
 
       return result;
 }}}())
+
 
   // -------------------------------------------
  //
@@ -446,7 +511,7 @@ var parse = function(input) {
     if (this.options.time)
         console.time("preparing input");
 
-    var lines = input.split(reLineEnding);
+    var lines = input.split(rx.lineEnding);
     /// 0b01
     var len = lines.length;
 
@@ -481,156 +546,11 @@ var parse = function(input) {
     return this.doc;
 };
 
-var unescapeChar = function(s) {
-    if (s.charCodeAt(0) === C_BACKSLASH)
-        return s.charAt(1);
-    else
-        return lib.decodeHTML(s);
-};
-
-//  replace entities and backslash escapes with literal characters
-var unescapeString = function (s) {
-    if (!rx.backslashOrAmp.test(s))
-        return s;
-    else
-        return s.replace(rx.entityOrEscapedChar, unescapeChar);
-};
-
-var normalizeURI = function(uri) {
-    try {
-        return encodeUnsafe(uri);
-    } catch (err) {
-        return uri;
-    }
-};
-
-var replaceUnsafeChar = function(s) {
-    switch (s) {
-        case "&":
-            return "&amp;";
-        case "<":
-            return "&lt;";
-        case ">":
-            return "&gt;";
-        case '"':
-            return "&quot;";
-        default:
-            return s;
-    }
-};
-
-var escapeXml = function (s) {
-    if (!rx.xmlSpecial.test(s))
-        return s;
-    else
-        return s.replace(rx.xmlSpecial, replaceUnsafeChar);
-};
-
-/*! http://mths.be/fromcodepoint v0.2.1 by @mathias */
-function fromCodePoint (...args) {
-    if (!arguments.length)
-        return "";
-
-    try {
-        return String.fromCodePoint(...args);
-    } catch (e) {
-        if (e instanceof RangeError)
-        return String.fromCharCode(0xfffd);
-    }
-
-    var codeUnits = [];
-    var highSurrogate,
-        lowSurrogate;
-
-    var i;
-    let MAX_SIZE = 0x4000;
-
-    var result = "";
-    while (++i < args.length) {
-      var codePoint = Number(arguments[i]);
-
-      if (!isFinite(codePoint)
-      ||  codePoint < 0
-      ||  codePoint > 0x10ffff
-      ||  floor(codePoint) !== codePoint)
-          return String.fromCharCode(0xfffd);
-
-      //  bmp code point
-      if (codePoint <= 0xffff)
-          codeUnits.push(codePoint);
-      else
-      //  astral code point (surrogate halves)
-      //  … surrogate formulae, js encoding 
-      codePoint <= 0xffff,
-      codePoint -= 0x10000,
-      highSurrogate = (codePoint>>10)+0xd800,
-      lowSurrogate = (codePoint%0x400)+0xdc00,
-
-      codeUnits
-     .push(highSurrogate, lowSurrogate);
-
-      if (i + 1 === args.length
-      ||  codeUnits.length > MAX_SIZE)
-          codeUnits.length = 0,
-          result += stringFromCharCode.apply(null, codeUnits);
-    }
-
-    return result;
-}
-
-/*! http://mths.be/repeat v0.2.0 by @mathias */
-if (!String.prototype.repeat)
-(function() {
-  var defineProperty = (function() {
-    // IE 8 only supports `Object.defineProperty` on DOM elements
-    try {
-      var obj = {};
-      var $defineProperty = Object.defineProperty;
-      var result = $defineProperty(obj, obj, obj) && $defineProperty;
-    } catch(error) {}
-    return result;
-  }());
-  var repeat = function(count) {
-    if (this == null) {
-      throw TypeError();
-    }
-    var string = String(this);
-    // `ToInteger`
-    var n = count ? Number(count) : 0;
-    if (n != n) { // better `isNaN`
-      n = 0;
-    }
-    // Account for out-of-bounds indices
-    if (n < 0 || n == Infinity) {
-      throw RangeError();
-    }
-    var result = '';
-    while (n) {
-      if (n % 2 == 1) {
-        result += string;
-      }
-      if (n > 1) {
-        string += string;
-      }
-      n >>= 1;
-    }
-    return result;
-  };
-  if (defineProperty) {
-    defineProperty(String.prototype, 'repeat', {
-      'value': repeat,
-      'configurable': true,
-      'writable': true
-    });
-  } else {
-    String.prototype.repeat = repeat;
-  }
-}());
 
   // -------------------------------------------
  //
 /*      InlineParser methods defined below 
-     [arsers try find match at current offset
+     parsers try find match at current offset
    … on match: return inline, advance subject  
                                               
  */// ------------------------------------------
@@ -689,7 +609,8 @@ var peek = function() {
 };
 
 /*  parse zero or more space characters
-/// … including at most one newline  */
+    … including at most one newline
+///                                   */
 var spnl = function() {
     this.match(rx.spnl);
     return true;
@@ -889,9 +810,8 @@ else
     return { numdelims: numdelims, can_open: can_open, can_close: can_close };
 };
 
-
- //////////////////////////////////////////////
-//  handle delimiter for emphasis or a quote
+/*  handle delimiter for emphasis or a quote
+///                                         */
 var handleDelim = function (cc, block) {
 var res = this.scanDelims(cc);
 if (!res) {
@@ -934,6 +854,7 @@ if ((res.can_open || res.can_close)
     return true;
 };
 
+
  //////////////////////
 //  remove delimiters
 var removeDelimiter = function (delim) {
@@ -953,6 +874,7 @@ var removeDelimitersBetween = function(bottom, top) {
         top.previous = bottom;
     }
 };
+
 
  /////////////////////////////
 //  process emph and strong
@@ -1678,7 +1600,6 @@ var C_NEWLINE$1 = 10;
 var C_OPEN_BRACKET$1 = 91;
 
 
-
 var reLineEnding = /\r\n|\n|\r/;
 var reSetextHeadingLine = /^(?:=+|-+)[ \t]*$/;
 var reClosingCodeFence = /^(?:`{3,}|~{3,})(?= *$)/;
@@ -1783,8 +1704,11 @@ var addChild = function(tag, offset) {
 };
 
 
-//  parse list marker, return data || null
-//  type, start, delimiter, bullet char, padding
+  //////////////////////
+ // parse list marker
+/*  return data || null
+    type, start, delimiter, bullet char, padding
+///                                           */
 var parseListMarker = function (parser,
                                 container) {
 
@@ -1884,10 +1808,11 @@ var listsMatch = (list, item) => (
 );
 
 
-//  finalize and close any unmatched blocks
+ ////////////////////////////
+//  close unmatched block
 var closeUnmatchedBlocks = function() {
 if (!this.allClosed) {
-//  finalize any blocks not matched
+//  finalize and close any unmatched blocks
     while (this.oldtip     !==
            this.lastMatchedContainer) {
        var parent = this.oldtip._parent;
@@ -2071,10 +1996,10 @@ var blocks = void {
 
       return 0;
     },
-    finalize: function(parser, block) {
+    finalize: function (parser, block) {
       if (block._isFenced) {
-      // fenced
-      // first line becomes info string
+      //  fenced
+      //  first line becomes info string
       var content = block._string_content;
       var newlinePos = content.indexOf("\n");
       var firstLine = content.slice(0, newlinePos);
@@ -2136,6 +2061,7 @@ var blocks = void {
     },
   }
 };
+
 
 // block start functions.  Return values:
 // 0 = no match
@@ -2343,7 +2269,6 @@ var blockStarts = void [
       return 2
   },
 
-
    ///////////////
   //  list item
   function (parser, container) {
@@ -2388,6 +2313,9 @@ var blockStarts = void [
   }
 ];
 
+
+ /////////////////////
+//  advance offset
 var advanceOffset = function (count, columns) {
   var currentLine = this.currentLine,
       charsToTab, charsToAdvance, c;
@@ -2471,8 +2399,11 @@ var findNextNonspace = function() {
 };
 
 
-//  analyze a line of text and update document
-//  … called on each input line of markdown doc
+  /////////////////////
+ // incorporate line
+/*  analyze a line of text and update document
+    … called on each input line of markdown doc
+///                                          */
 var incorporateLine = function (ln) {
     var all_matched = true;
     var t;
@@ -2575,7 +2506,6 @@ var incorporateLine = function (ln) {
       }
     }
 
-
     /*  a text line remains at the offset
         … add text to appropriate container  */
 
@@ -2626,11 +2556,8 @@ var incorporateLine = function (ln) {
     if (t === "html_block"
     &&  container._htmlBlockType >= 1
     &&  container._htmlBlockType <= 5) {
-
-    let rx = rx.htmlBlockClose
-    [container._htmlBlockType];
-
-    if (rx.test(this.currentLine
+    if (rx.htmlBlockClose
+          .test(this.currentLine
                     .slice(this.offset)))
         this.lastLineLength = ln.length,
         this.finalize(container,
@@ -2649,12 +2576,16 @@ var incorporateLine = function (ln) {
     }
     this.lastLineLength = ln.length;
 };
+  
 
-//  close and postprocess a block
-//  … reset tip to parent of the closed block
-/*  e.g. string_content from strings,
+  /////////////
+ // finalize
+/*  close and postprocess a block
+ …  reset tip to parent of the closed block
+
+    e.g. string_content from strings,
     'tight', 'loose' status of a list,
-    parsing the beginnings of paragraphs  
+    parsing the beginnings of paragraphs
 ///                                        */
 var finalize = function (block, lineNumber) {
     var above = block._parent;
@@ -2686,6 +2617,11 @@ var processInlines = function (block) {
     }
 };
 
+
+  // ------------------------------
+ //         Parser object    
+// --------------------------------
+
 var Document = function() {
     var doc = new Node("document", [
         [1, 1],
@@ -2694,10 +2630,7 @@ var Document = function() {
     return doc;
 };
 
-  // ------------------------------
- //         Parser object    
-// --------------------------------
-function Parser(options) {
+function Parser (options) {
   return {
     doc: new Document(),
     blocks: blocks,
@@ -2732,6 +2665,7 @@ function Parser(options) {
     options: options || {}
   };
 }
+
 
   // -------------------------------------------
  //
@@ -2832,6 +2766,7 @@ function tag (name, attrs, selfclosing) {
     this.lastOut = ">";
     this.buffer += (selfclosing) ? " />" : ">";
 }
+
 
   // -------------------------------------------
  //
@@ -3096,6 +3031,15 @@ HtmlRenderer.prototype.esc = escapeXml;
 HtmlRenderer.prototype.out = out$1;
 HtmlRenderer.prototype.tag = tag;
 HtmlRenderer.prototype.attrs = attrs;
+
+
+  // -------------------------------------------
+ //
+/*     XmlRenderer methods defined below
+          Lorem ipsum dolor sit amet,
+        … consectetur adipiscing elit
+                                              
+ */// ------------------------------------------
 
 var reXMLTag = /\<[^>]*\>/;
 
@@ -3695,6 +3639,11 @@ function exportLib (exports={}) {
   var encodeCache = {};
 
   exports.encode_unsafe = encodeUnsafeChar;
+
+  //  polyfills
+  exports.polyfills = {};
+  exports.polyfills.stringRepeat  = stringRepeatPolyfill;
+  exports.polyfills.fromCodePoint = fromCodePointPolyfill;
 
   //  legacy aliases
   exports.encodeHTML4 = exports.encodeHTML;
@@ -6186,5 +6135,116 @@ function getEntitiesList() {
     zwj: "‍",
     zwnj: "‌",
 }}
+
+function stringRepeatPolyfill() {
+/*! http://mths.be/repeat v0.2.0 by @mathias */
+if (!String.prototype.repeat)
+(function() {
+  var defineProperty = (function() {
+    // IE 8 only supports `Object.defineProperty` on DOM elements
+    try {
+      var obj = {};
+      var $defineProperty = Object.defineProperty;
+      var result = $defineProperty(obj, obj, obj) && $defineProperty;
+    } catch(error) {}
+    return result;
+  }());
+  var repeat = function(count) {
+    if (this == null) {
+      throw TypeError();
+    }
+    var string = String(this);
+    // `ToInteger`
+    var n = count ? Number(count) : 0;
+    if (n != n) { // better `isNaN`
+      n = 0;
+    }
+    // Account for out-of-bounds indices
+    if (n < 0 || n == Infinity) {
+      throw RangeError();
+    }
+    var result = '';
+    while (n) {
+      if (n % 2 == 1) {
+        result += string;
+      }
+      if (n > 1) {
+        string += string;
+      }
+      n >>= 1;
+    }
+    return result;
+  };
+  if (defineProperty) {
+    defineProperty(String.prototype, 'repeat', {
+      'value': repeat,
+      'configurable': true,
+      'writable': true
+    });
+  } else {
+    String.prototype.repeat = repeat;
+  }
+}());
+}
+
+function fromCodePointPolyfill (...args) {
+/*! http://mths.be/fromcodepoint v0.2.1 by @mathias */
+    if (!arguments.length)
+        return "";
+
+    try {
+        return String.fromCodePoint(...args);
+    } catch (e) {
+        if (e instanceof RangeError)
+        return String.fromCharCode(0xfffd);
+    }
+
+    var codeUnits = [];
+    var highSurrogate,
+        lowSurrogate;
+
+    var i;
+    let MAX_SIZE = 0x4000;
+
+    var result = "";
+    while (++i < args.length) {
+      var codePoint = Number(arguments[i]);
+
+      if (!isFinite(codePoint)
+      ||  codePoint < 0
+      ||  codePoint > 0x10ffff
+      ||  floor(codePoint) !== codePoint)
+          return String.fromCharCode(0xfffd);
+
+      //  bmp code point
+      if (codePoint <= 0xffff)
+          codeUnits.push(codePoint);
+      else
+      //  astral code point (surrogate halves)
+      //  … surrogate formulae, js encoding 
+      codePoint <= 0xffff,
+      codePoint -= 0x10000,
+      highSurrogate = (codePoint>>10)+0xd800,
+      lowSurrogate = (codePoint%0x400)+0xdc00,
+
+      codeUnits
+     .push(highSurrogate, lowSurrogate);
+
+      if (i + 1 === args.length
+      ||  codeUnits.length > MAX_SIZE)
+          codeUnits.length = 0,
+          result += stringFromCharCode.apply(null, codeUnits);
+    }
+
+    return result;
+}
+
+function consolelog (...inputs) {
+  if (exports.development
+  || (!exports.production
+  &&  !exports.suppress
+  &&  !exports.silent))
+      console.log(...inputs);
+}
 
 })));
