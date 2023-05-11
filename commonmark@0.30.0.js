@@ -13,6 +13,9 @@
 const {createModuleCommonJS,
        getExport, unwrapExports, importDefault}
                             = factoryCommonJS();
+
+// ---------------------------------------------
+
 var CODE_INDENT
  = (typeof exports.codeIndent === "number")
          ? exports.codeIndent : 4;
@@ -64,8 +67,12 @@ var Node = function (nodeType, sourcepos) {
 };
 
 
- //////////////////////////////////////////
-// html tag attributes renderer function
+  // -------------------------------------------
+ //     A few touchpoints to keep an eye on
+// ---------------------------------------------
+
+ ///////////////////////////////////////////
+//  html tag attributes renderer function 
 function attrs (node) {
     var att = [];
     if (this.options.sourcepos) {
@@ -89,23 +96,22 @@ function attrs (node) {
 
  //////////////////////////
 //  text parser function
-var text = function(s) {
+var text = function (s) {
     var node = new Node("text");
     node._literal = s;
     return node;
 };
 
-
-  ////////////////////////////////////////////
- // normalize a reference in reference link 
+ /////////////////////////////////////////////
+//  normalize a reference in reference link 
 /*  parse string content in block
  -  remove []s,
  -  trim,
  -  collapse internal space,
  -  unicode case fold
- …  see commonmark/commonmark.js#168
-///                                       */
-var normalizeReference = function(string) {
+ … see commonmark/commonmark.js#168
+...                                        */
+var normalizeReference = function (string) {
     return string
         .slice(1, string.length - 1)
         .trim()
@@ -234,7 +240,7 @@ var NodeWalker = function (root) {
     return { entering: entering, node: cur };
 }};
 
-(function walkingTree() { // ***
+(function walkingTree() {
   let proto = Node.prototype;
 
   const appendChild = function (node) {
@@ -511,7 +517,7 @@ var parse = function(input) {
     if (this.options.time)
         console.time("preparing input");
 
-    var lines = input.split(rx.lineEnding);
+    var lines = input.split(reLineEnding);
     /// 0b01
     var len = lines.length;
 
@@ -555,9 +561,10 @@ var parse = function(input) {
                                               
  */// ------------------------------------------
 
-  //////////////////////////////////////////////
- // InlineParser keeps track of subject and
-//  position in that subject (string to parse)
+//  --------------------------------------------
+//      InlineParser keeps track of position
+//          in subject string to parse
+//  --------------------------------------------
 let inlineParser = void function index () {
     return { 
     subject, pos,
@@ -609,8 +616,8 @@ var peek = function() {
 };
 
 /*  parse zero or more space characters
-    … including at most one newline
-///                                   */
+    … including at most one newline  
+///                               */
 var spnl = function() {
     this.match(rx.spnl);
     return true;
@@ -810,8 +817,9 @@ else
     return { numdelims: numdelims, can_open: can_open, can_close: can_close };
 };
 
-/*  handle delimiter for emphasis or a quote
-///                                         */
+
+ //////////////////////////////////////////////
+//  handle delimiter for emphasis or a quote
 var handleDelim = function (cc, block) {
 var res = this.scanDelims(cc);
 if (!res) {
@@ -1560,6 +1568,7 @@ var parseInlines = function(block) {
   // ------------------------------
  //       InlineParser object    
 // --------------------------------
+
 function InlineParser(options) {
     return {
         subject: "",
@@ -1598,6 +1607,7 @@ function InlineParser(options) {
 
 var C_NEWLINE$1 = 10;
 var C_OPEN_BRACKET$1 = 91;
+
 
 
 var reLineEnding = /\r\n|\n|\r/;
@@ -1702,7 +1712,6 @@ var addChild = function(tag, offset) {
 
     return newBlock;
 };
-
 
   //////////////////////
  // parse list marker
@@ -1809,7 +1818,7 @@ var listsMatch = (list, item) => (
 
 
  ////////////////////////////
-//  close unmatched block
+//  close unmatched blocks
 var closeUnmatchedBlocks = function() {
 if (!this.allClosed) {
 //  finalize and close any unmatched blocks
@@ -2063,10 +2072,10 @@ var blocks = void {
 };
 
 
-// block start functions.  Return values:
-// 0 = no match
-// 1 = matched container, keep going
-// 2 = matched leaf, no more block starts
+//  block start functions, return values:
+//  0 = no match
+//  1 = matched container, keep going
+//  2 = matched leaf, no more block starts
 var blockStarts = void [
     function block_quote(){},
     function heading(){},
@@ -2314,7 +2323,7 @@ var blockStarts = void [
 ];
 
 
- /////////////////////
+ ////////////////////
 //  advance offset
 var advanceOffset = function (count, columns) {
   var currentLine = this.currentLine,
@@ -2556,13 +2565,17 @@ var incorporateLine = function (ln) {
     if (t === "html_block"
     &&  container._htmlBlockType >= 1
     &&  container._htmlBlockType <= 5) {
-    if (rx.htmlBlockClose
-          .test(this.currentLine
-                    .slice(this.offset)))
+    let reHtmlBlockClose = rx.htmlBlockClose
+                  [container._htmlBlockType];
+
+    if (reHtmlBlockClose
+       .test(this.currentLine
+                 .slice(this.offset)))
+    {
         this.lastLineLength = ln.length,
         this.finalize(container,
                       this.lineNumber);
-    }}
+    }}}
     else
     //  … create paragraph container for line
     if (!this.blank
@@ -2576,16 +2589,16 @@ var incorporateLine = function (ln) {
     }
     this.lastLineLength = ln.length;
 };
-  
+
 
   /////////////
  // finalize
 /*  close and postprocess a block
- …  reset tip to parent of the closed block
+    … reset tip to parent of the closed block
 
     e.g. string_content from strings,
     'tight', 'loose' status of a list,
-    parsing the beginnings of paragraphs
+    parsing the beginnings of paragraphs  
 ///                                        */
 var finalize = function (block, lineNumber) {
     var above = block._parent;
@@ -2617,11 +2630,6 @@ var processInlines = function (block) {
     }
 };
 
-
-  // ------------------------------
- //         Parser object    
-// --------------------------------
-
 var Document = function() {
     var doc = new Node("document", [
         [1, 1],
@@ -2630,7 +2638,12 @@ var Document = function() {
     return doc;
 };
 
-function Parser (options) {
+
+  // ------------------------------
+ //         Parser object    
+// --------------------------------
+
+function Parser(options) {
   return {
     doc: new Document(),
     blocks: blocks,
@@ -3031,7 +3044,7 @@ HtmlRenderer.prototype.esc = escapeXml;
 HtmlRenderer.prototype.out = out$1;
 HtmlRenderer.prototype.tag = tag;
 HtmlRenderer.prototype.attrs = attrs;
-
+                             
 
   // -------------------------------------------
  //
@@ -3639,7 +3652,7 @@ function exportLib (exports={}) {
   var encodeCache = {};
 
   exports.encode_unsafe = encodeUnsafeChar;
-
+    
   //  polyfills
   exports.polyfills = {};
   exports.polyfills.stringRepeat  = stringRepeatPolyfill;
@@ -6237,14 +6250,6 @@ function fromCodePointPolyfill (...args) {
     }
 
     return result;
-}
-
-function consolelog (...inputs) {
-  if (exports.development
-  || (!exports.production
-  &&  !exports.suppress
-  &&  !exports.silent))
-      console.log(...inputs);
 }
 
 })));
