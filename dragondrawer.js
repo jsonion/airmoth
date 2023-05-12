@@ -145,7 +145,7 @@ class DragonDrawer {
         index = 0;
     else
     if (after === true)
-        this.container.appendChild(el),
+        this.container.appendChild(element),
 
         index = this.stack.length - 1;
     else
@@ -310,8 +310,8 @@ class DragonDrawer {
     }
 
     //  block closing, better called once
-    if (isSingleRow
-    &&  i === this.stack.length - 1) {
+    if (
+        i === this.stack.length - 1) {
     if (element.nextElementSibling)
         spacers[_1].classList.add("block-end", "divider-after");
     else
@@ -345,7 +345,9 @@ class DragonDrawer {
     else throw "";
   }
 
-  zIndex = jsonion.zIndexBounds;
+ /////////////
+//  imports
+    zIndex = jsonion.zIndexBounds;
 }
 
 function zIndexBounds (container) {
