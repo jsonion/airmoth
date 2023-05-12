@@ -31,7 +31,7 @@ class DragOnDrawer {
        = this.hex2rgb(touchpointHighlightColor);
   }
 
-  // override
+  //  override
   applyTransforms(){}
 
   callbacks={
@@ -41,7 +41,7 @@ class DragOnDrawer {
 
      resize: (e)=>this.onResize.apply(this, e),
   };
- 
+
   wrap ({
     element, innerHTML, before, after, i, lockTo
   }) {
@@ -107,7 +107,7 @@ class DragOnDrawer {
               ?  index + 1 : null;
     }
     else
-    //  get neighbor elements
+    //  get next and prev items
     if (typeof index === "number") {
     if (before === true)
         before = this.stack[index][0];
@@ -116,25 +116,51 @@ class DragOnDrawer {
         after = this.stack[index][0];
     }
 
-    let section=[ element, data ];
+    let section=[ element, data ]; i=0;
    /////
-    if (typeof index !== "number") {
-    if (before === true)
-        this.container.prependChild(element),
-
-        index = 0;
-    else
-        this.container.appendChild(el),
-
-        index = this.stack.length - 1;
-    }
-    else
+    if (typeof index === "number") {
     if (before)
     this.container.insertBefore(element, before);
 
     else
     if (after)
     this.container.insertAfter(element, after);
+
+    }
+    else
+    //  append before or after all contents
+    if (before === true)
+        this.container.prependChild(element),
+
+        index = 0;
+    else
+    if (after === true)
+        this.container.appendChild(el),
+
+        index = this.stack.length - 1;
+    else
+    //  match siblings in class and container
+    if (typeof before === "object")
+    for (let el of this.container.children) {
+      if (el === this.stack[i]) i++;
+      else
+      if (el === before) {
+          index = i;
+          before = null;
+          break;
+      }
+    }
+    else
+    if (typeof after === "object")
+    for (let el of this.container.children) {
+      if (el === this.stack[i]) i++;
+      else
+      if (el === after) {
+          index = i;
+          after = null;
+          break;
+      }
+    }
 
     else return console.error("");
 
@@ -237,7 +263,7 @@ class DragOnDrawer {
         spacers[_1].className="";
 
     //  block start
-    if (section === this.container.children[0]) 
+    if (section === this.container.children[0])
         spacers[0].classList.add("block-start");
     else
     if (i === 0)
@@ -281,21 +307,21 @@ class DragOnDrawer {
   }
 
   onComponentWillUnmount() {
-      if (this.refreshOnResize)
-        window.removeEventListener("resize",
-          this.callbacks.resize);
+    if (this.refreshOnResize)
+      window.removeEventListener("resize",
+        this.callbacks.resize);
 
-      let burgerCls = this.
-                     .template
-                     .children[1].className;
+    let burgerCls = this.
+                   .template
+                   .children[1].className;
 
-      let q = `:scope > .${burgerCls}`;
-      let subset
-        = this.container.querySelectorAll(q);
+    let q = `:scope > .${burgerCls}`;
+    let subset
+      = this.container.querySelectorAll(q);
 
-      for (let handle of subset) {
-            handle.remove();
-      }
+    for (let handle of subset) {
+      handle.remove();
+    }
   }
 
   static element (selector) {
