@@ -1,4 +1,4 @@
-class DragonDrawer {
+class DragOnDrawer {
 	static selector;
 	static tplMatch;
 	static template;
