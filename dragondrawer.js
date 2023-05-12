@@ -1,7 +1,7 @@
 class DragOnDrawer {
+  static template; template;
   static selector;
-  static tplMatch;
-  static template;
+  static tplMatch=":scope > hr + div.container + div.gradient + div.handle + hr";
   static placeholder;
 
   container; width; height;
@@ -12,6 +12,9 @@ class DragOnDrawer {
 
   stack = [];
   constructor () {
+    this.template = eval(this.constructor.name)
+        .template;
+
     this.handleSize = {
       width:  handleSize.width  || 22,
       height: handleSize.height || 22,
@@ -30,7 +33,6 @@ class DragOnDrawer {
 
   // override
   applyTransforms(){}
-
 
   callbacks={
       click: (e)=>this.onClick.apply(this, e),
@@ -128,11 +130,11 @@ class DragOnDrawer {
     }
     else
     if (before)
-    this.container.insertBefore(wrap, before);
+    this.container.insertBefore(element, before);
 
     else
     if (after)
-    this.container.insertAfter(wrap, after);
+    this.container.insertAfter(element, after);
 
     else return console.error("");
 
@@ -147,28 +149,26 @@ class DragOnDrawer {
     if (!after)
          after = this.stack[index-1][0];
 
-    this.applyStyle(section, {prev: before,
-                              next: after });
-    return index;
+    return [i, [wrap, before, after]];
   }
 
   unlink (element, index=0) {
     if (!Number.isInteger(index)
     || (element !== this.stack[index][0]))
          index
-       = this.cards.findIndex(el =>
-                  element === el[0]);
+       = this.stack.findIndex(el =>
+                              el[0]===element);
     var data;
     if (index !== -1)
         data
-      = this.cards.splice(index,1)[0].slice(1);
+      = this.stack.splice(index,1)[0].slice(1);
 
     return data;
   }
 
   setHandle (burger, resize, zIndex=null) {
-    let container = burger.parentElement;
     let [ outline, icon ]=burger.children;
+    let container = burger.parentElement;
 
     let { width, height,
       lineWidth, lineHeight, lineSpacing }
@@ -209,6 +209,93 @@ class DragOnDrawer {
     if (typeof zIndex === "number")
         outline.style["z-index"] = zIndex,
            icon.style["z-index"] = zIndex;
+  }
+
+  chainStyle (element,
+             { i=null, prev=null, next=null }) {
+    var isSingleRow; // outside of loop
+   /////
+    if (i === null) {
+        i = this.stack.findIndex(obj =>
+                     element === obj[0]);
+    if (i > 0
+    &&  prev === null)
+        prev = this.stack[i-1][0];
+
+    if (next === null
+    &&     i < this.stack.length - 1)
+        next = this.stack[i+1][0];
+
+        isSingleRow = true;
+    }
+
+    let spacers
+      = section.getElementsByTagName("hr"),
+   _1 = spacers.length - 1;
+
+        spacers[0].className="";
+        spacers[_1].className="";
+
+    //  block start
+    if (section === this.container.children[0]) 
+        spacers[0].classList.add("block-start");
+    else
+    if (i === 0)
+        spacers[0].classList.add("block-start", "divider-before");
+
+    //  ... in block body
+    if (prev) {
+    let prev_ = prev.getElementsByTagName("hr");
+
+        prev_[prev_.length-1].className="";
+
+    if (prev !== section.previousElementSibling)
+        prev_[prev_.length-1]
+            .classList.add("divider-after"),
+
+        spacers[0]
+            .classList.add("divider-before");
+    }
+
+    //  ... next section, called outside of loop
+    if (next) {
+    let next_ = prev.getElementsByTagName("hr");
+
+        next_[0].className="";
+
+    if (next !== section.nextElementSibling)
+        next_[0]
+            .classList.add("divider-before"),
+
+        spacers[spacers.length-1]
+            .classList.add("divider-after");
+    }
+
+    //  block closing
+    if (i === this.stack.length - 1) {
+    if (section.nextElementSibling)
+        spacers[_1].classList.add("block-end", "divider-after");
+    else
+        spacers[_1].classList.add("block-end");
+    }
+  }
+
+  onComponentWillUnmount() {
+      if (this.refreshOnResize)
+        window.removeEventListener("resize",
+          this.callbacks.resize);
+
+      let burgerCls = this.
+                     .template
+                     .children[1].className;
+
+      let q = `:scope > .${burgerCls}`;
+      let subset
+        = this.container.querySelectorAll(q);
+
+      for (let handle of subset) {
+            handle.remove();
+      }
   }
 
   static element (selector) {
