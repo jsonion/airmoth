@@ -15,7 +15,7 @@ class DragonDrawer {
 
   }) {
     if (container instanceof HTMLElement)
-    this.container = container,
+    this.container = container;
 
     else throw "";
 
@@ -31,16 +31,19 @@ class DragonDrawer {
       lineSpacing: handleSize.lineSpacing || 3,
     };
 
+    if ((scaleOnDrag))
     this.scaleOnDrag
        = Math.abs(parseInt(scaleOnDrag));
 
+    if ((touchpointHighlightColor))
     this.touchpointHighlightColor
        = this.hex2rgb(touchpointHighlightColor);
+
+    if (typeof animatingClass === "string")
+    this.animatingClass = animatingClass;
   }
 
   //  override
-  applyTransforms(){}
-
   callbacks={
       click: (e)=>this.onClick.apply(this, e),
     release: (e)=>this.onRelease.apply(this, e),
