@@ -1,4 +1,4 @@
-class DragOnDrawer {
+class DragonDrawer {
   static template; template;
   static selector;
   static tplMatch=":scope > hr + div.container + div.gradient + div.handle + hr";
@@ -11,7 +11,14 @@ class DragOnDrawer {
   touchpointHighlightColor;
 
   stack = [];
-  constructor () {
+  constructor ({
+
+  }) {
+    if (container instanceof HTMLElement)
+    this.container = container,
+
+    else throw "";
+
     this.template = eval(this.constructor.name)
         .template;
 
@@ -173,7 +180,7 @@ class DragOnDrawer {
          before = this.stack[index-1][0];
 
     if (!after)
-         after = this.stack[index-1][0];
+         after = this.stack[index+1][0];
 
     return [i, [wrap, before, after]];
   }
@@ -238,8 +245,10 @@ class DragOnDrawer {
   }
 
   chainStyle (element,
-             { i=null, prev=null, next=null }) {
-    var isSingleRow; // outside of loop
+        args={ i:null, prev:null, next:null }) {
+
+    var isSingleRow, 
+      { i,prev,next }=args;
    /////
     if (i === null) {
         i = this.stack.findIndex(obj =>
@@ -256,14 +265,14 @@ class DragOnDrawer {
     }
 
     let spacers
-      = section.getElementsByTagName("hr"),
+      = element.getElementsByTagName("hr"),
    _1 = spacers.length - 1;
 
         spacers[0].className="";
         spacers[_1].className="";
 
     //  block start
-    if (section === this.container.children[0])
+    if (element === this.container.children[0])
         spacers[0].classList.add("block-start");
     else
     if (i === 0)
@@ -297,9 +306,10 @@ class DragOnDrawer {
             .classList.add("divider-after");
     }
 
-    //  block closing
-    if (i === this.stack.length - 1) {
-    if (section.nextElementSibling)
+    //  block closing, better called once
+    if (isSingleRow
+    &&  i === this.stack.length - 1) {
+    if (element.nextElementSibling)
         spacers[_1].classList.add("block-end", "divider-after");
     else
         spacers[_1].classList.add("block-end");
@@ -350,4 +360,43 @@ function zIndexBounds (container) {
   }
 
   return zIndex;
+}
+
+function getBackgroundColor (elem) {
+  let result={};
+
+  let props=["background-color"], mod=[],
+  len=props.length;
+
+  do {
+    let styles=window.getComputedStyle(elem);
+
+    mod.length=0;
+    for (var [i, prop] of props.entries()) {
+         let val=styles.getPropertyValue(prop);
+
+         if (val && val !== "none")
+         prop
+       = prop.replace(/^./,  str =>
+                             str.toUpperCase())
+             .replace(/-./g, str =>
+                             str.substring(1)
+                                .toUpperCase()),
+         result[prop] = val,
+            mod.unshift(i);
+    }
+
+    if (mod.length
+    &&  mod.length < props.length)
+        mod.forEach(i => props.splice(i,1));
+
+    else
+    if (element.parentElement)
+        element = element.parentElement;
+
+    else break;
+  } while (true)
+
+  if (len !== props.length)
+  return result;
 }
