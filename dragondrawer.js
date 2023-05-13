@@ -448,7 +448,7 @@ class DragonDrawer extends AnimatingClass {
     }
 
     //  block closing, better called once
-    if (isSingleRow
+    if (
     &&  i === this.stack.length - 1) {
     if (element.nextElementSibling)
         spacers[_1].classList.add("block-end", "divider-after");
