@@ -1,26 +1,76 @@
-class DragonDrawer {
+class AnimatingClass {
+  constructor (animatingClass=null) {
+    if ((animatingClass instanceof Array
+    &&   validateFormat(animatingClass))
+
+    || ((animatingClass instanceof Object
+    &&   Object.values(animatingClass)
+               .every((animatingCls) =>
+        validateFormat(animatingCls))))) {
+
+        this.animatingClass
+           = animatingClass;
+    }
+
+    function validateFormat (animatingObj) {
+      let [strOrFn, int, fn]=animatingObj;
+
+      if ((typeof strOrFn === "string"
+      ||   strOrFn instanceof Array)
+
+      ||  (!int
+      ||   Number.isInteger(int))
+
+      ||  (typeof fn === "undefined"
+      ||   typeof fn === "function")) {
+
+      if (typeof strOrFn === "string")
+          animatingObj[0] = strOrFn.split(" ");
+
+          return animatingObj.unshift(null);
+      }
+    }
+  }
+}
+
+class DragonDrawer extends AnimatingClass {
   static template; template;
   static selector;
   static tplMatch=":scope > hr + div.container + div.gradient + div.handle + hr";
   static placeholder;
 
-  container; width; height;
+  container; boundingRect;
 
   handleSize; scaleOnDrag;
 
   touchpointHighlightColor;
+  touchpointHeight;
 
   stack = [];
   constructor ({
+    container, selector,
 
+    handleSize, scaleOnDrag,
+                cropFadeColor,
+
+                touchpointHeight,
+                touchpointHighlightColor,
+
+                animatingClass,
   }) {
-    if (container instanceof HTMLElement)
-    this.container = container;
-
-    else throw "";
+    super(animatingClass);
 
     this.template = eval(this.constructor.name)
         .template;
+
+    if (container instanceof HTMLElement)
+    this.container = container,
+    this.boundingRect
+       = container.getBoundingClientRect;
+
+    else throw "";
+
+      /////
 
     this.handleSize = {
       width:  handleSize.width  || 22,
@@ -33,24 +83,114 @@ class DragonDrawer {
 
     if ((scaleOnDrag))
     this.scaleOnDrag
-       = Math.abs(parseInt(scaleOnDrag));
+       = Math.abs(parseFloat(scaleOnDrag));
+
+    if ((touchpointHeight))
+    this.touchpointHeight
+       = Math.abs(parseFloat(touchpointHeight));
 
     if ((touchpointHighlightColor))
     this.touchpointHighlightColor
        = this.hex2rgb(touchpointHighlightColor);
-
-    if (typeof animatingClass === "string")
-    this.animatingClass = animatingClass;
   }
 
-  //  override
   callbacks={
       click: (e)=>this.onClick.apply(this, e),
-    release: (e)=>this.onRelease.apply(this, e),
      onDrag: (e)=>this.onDrag.apply(this, e),
+    release: (e)=>this.onRelease.apply(this, e),
+             
+              animateFn: this.animateFn,
+              toggleCls: this.toggleCls,
+                 buffer: [],
 
-     resize: (e)=>this.onResize.apply(this, e),
+      hover: (e)=>this.onHover.apply(this, e),
+        out: (e)=>this.onHover.apply(this, e),
+
+     resize: null,
   };
+
+  animateFn() {
+    let bfr=this.buffer;
+
+    if (bfr.length)
+    return bfr[0](...bfr.slice(1))
+                 && (bfr.length=0);
+
+    var [ e, section, placeholder,
+          touchpoint, touchpoints,
+          animatingClass, int, fn ]=arguments;
+    if ((typeof fn !== "function")) throw ".";
+
+    if (int>0
+    || !int) {
+        fn(...arguments);
+        if (!int) return;
+    }
+    else int=Math.abs(int);
+
+    setTimeout(this.animateFn, int);
+    bfr.splice(-1,0, fn, e, 
+                section, placeholder,
+             touchpoint, touchpoints,
+                      animatingClass);
+  }
+
+  toggleCls() {
+    let bfr=this.buffer;
+
+    if (bfr.length)
+    return bfr[0].classList.remove(...bfr[2])
+        && bfr[1].classList.remove(...bfr[2])
+        && bfr.length=0;
+
+    let [ className, int,
+            section, placeholder ]=arguments;
+
+    setTimeout(this.toggleCls, int);
+    bfr.splice(-1,0, className, 
+            section, placeholder);
+  }
+
+  onHover (e) {
+    if (this.stack.length === 1)
+    return;
+
+    if (!isPointerOver)
+    this.isPointerOver=true,
+    this.beforeDrag(e, e.target.parentElement);
+
+    else
+    this.isPointerOver=false,
+  }
+
+  beforeDrag (e, element, placeholder=null) {
+    let section = this.stack.find(obj => 
+                      element === obj[0]);
+    if (!section) return;
+
+    let [touchpoint, touchpoints]
+      = this.calcTouchpoints(e, element);
+
+         touchpoint.calcTouchpoints
+             = this.calcTouchpoints;
+
+    if (!this.placeholder && placeholder)
+    section[0].parentElement
+              .insertBefore(placeholder,
+                                element);
+
+    Object.assign(this, {
+      isDislocated:[ false, section ],
+           sourceX: e.clientX,
+           sourceY: e.clientY,
+        touchpoint, touchpoints,
+    });
+  }
+          // override
+           onDrag(){}
+          onClick(){}
+        onRelease(){}
+  calcTouchpoints(){}
 
   wrap ({
     element, innerHTML, before, after, i, lockTo
@@ -68,15 +208,17 @@ class DragonDrawer {
         wrap.children[0]
             .children[1].innerHTML = innerHTML;
    /////
-    let { click, release } = this.callbacks;
+    let { hover,click,release }=this.callbacks;
     let [ btn ]
         = wrap.getElementsByClassName("handle");
 
+    if (hover)
+    btn.addEventListener("pointerover", hover);
     btn.addEventListener("pointerdown", click);
     btn.addEventListener("pointerup", release);
 
     let index
-     =  this.place(wrap,{ before, after, i
+     =  this.place(wrap,{ before, after, i,
                                     lockTo });
 
     this.setHandle(btn, this.handleSize);
@@ -210,15 +352,6 @@ class DragonDrawer {
       lineWidth, lineHeight, lineSpacing }
                                 = resize;
 
-    if (typeof zIndex !== "number")
-        zIndex
-      = resize.zIndex &&
-        resize.zIndex[container] ||
-       (resize.zIndex[container]
-      =   this.zIndex(container));
-
-    let [ outline, icon ]=elem.children;
-
     outline.style.width  = width;
     outline.style.height = height;
 
@@ -242,9 +375,14 @@ class DragonDrawer {
          i++;
     }
 
+    if (typeof zIndex !== "number")
+        zIndex
+      = resize.zIndex ||
+          this.zIndex &&
+          this.zIndex(container);
+
     if (typeof zIndex === "number")
-        outline.style["z-index"] = zIndex,
-           icon.style["z-index"] = zIndex;
+        burger.style["z-index"] = zIndex;
   }
 
   chainStyle (element,
@@ -310,8 +448,8 @@ class DragonDrawer {
     }
 
     //  block closing, better called once
-    if (
-        i === this.stack.length - 1) {
+    if (isSingleRow
+    &&  i === this.stack.length - 1) {
     if (element.nextElementSibling)
         spacers[_1].classList.add("block-end", "divider-after");
     else
@@ -324,7 +462,7 @@ class DragonDrawer {
       window.removeEventListener("resize",
         this.callbacks.resize);
 
-    let burgerCls = this.
+    let burgerCls = this
                    .template
                    .children[1].className;
 
@@ -347,20 +485,28 @@ class DragonDrawer {
 
  /////////////
 //  imports
-    zIndex = jsonion.zIndexBounds;
+    zIndex = zIndexBounds;
 }
 
 function zIndexBounds (container) {
-  var zIndex=0;
+  var zIndexMin=0, zIndexMax=0;
 
   if (container.style
   &&  container.style.zIndex)
-      zIndex = container.style.zIndex;
+      zIndexMin
+    = zIndexMax = container.style.zIndex;
 
   if (container.children
   &&  container.children.length)
   for (let elem of container.children) {
-   if (elem.style.zIndex > zIndex)
+   if (zIndexMax > elem.style.zIndex) {
+       zIndexMax = elem.style.zIndex;
+   if (zIndexMin === 0)
+       zIndexMin = elem.style.zIndex;
+   }
+   else
+   if (zIndexMin === 0
+   ||  zIndexMin < elem.style.zIndex)
        zIndexMin = elem.style.zIndex;
   }
 
