@@ -432,11 +432,11 @@ var C_SPACE = 32;
 var C_OPEN_BRACKET = 91;
 
 const rx = (function regularExpressions() {
-  let { htmlTag, backslashOrAmp, entityOrEscapedChar, xmlSpecial, linkDestination, escapable, entityHere, ticks, ticksHere, ellipses, dash, emailAutolink, autolink, linkTitle, linkLabel, whitespaceChar, unicodeWhitespaceChar, finalSpace, initialSpace, spaceAtEndOfLine, spnl, nonSpace, punctuation, decodeHtml, xmlTag, main, num, nonAscii, htmlBlockOpen, htmlBlockClose, thematicBreak, orderedListMarker, bulletListMarker, ATXHeadingMarker, codeFence, closingCodeFence, setextHeadingLine, lineEnding, unsafeProtocol, safeDataProtocol, maybeSpecial }
+  let { htmlTag, backslashOrAmp, entityOrEscapedChar, xmlSpecial, linkDestination, escapable, entityHere, ticks, ticksHere, ellipses, dash, emailAutolink, autolink, linkTitle, linkLabel, whitespaceChar, unicodeWhitespaceChar, finalSpace, initialSpace, spaceAtEndOfLine, spnl, nonSpace, punctuation, decodeHtml, xmlTag, main, num, nonAscii, htmlBlockOpen, htmlBlockClose, thematicBreak, orderedListMarker, bulletListMarker, ATXHeadingMarker, codeFence, closingCodeFence, setextHeadingLine, lineEnding, unsafeProtocol, safeDataProtocol, maybeSpecial, debugOffset, __debugOffset }
     = getRegularExpressions();
- 
+
  //////////////////////////////
-  return {            htmlTag,
+  const rx = {        htmlTag,
                backslashOrAmp,
           entityOrEscapedChar,
                    xmlSpecial,
@@ -482,18 +482,72 @@ const rx = (function regularExpressions() {
 
                unsafeProtocol,
              safeDataProtocol,
- //////////////////////////////
-  pick: function (...objKeys) {
-      let allKeys = Object.keys(this);
+   ////////////////////////////
+    pick: function (...objKeys) {
+        let allKeys = Object.keys(this);
 
-      var result = {};
-      for (let key of objKeys) {
-       if (allKeys.indexOf(key) !== -1)
-           result[key] = this[key];
-      }
+        var result = {};
+        for (let key of objKeys) {
+         if (allKeys.indexOf(key) !== -1)
+             result[key] = this[key];
+        }
 
-      return result;
-}}}())
+        return result;
+    },
+    debugOffset,
+  __debugOffset,
+  };
+
+  Object.entries(rx).forEach(([key,regexp]) => {
+    if (key !== "debugOffset"
+    &&  key !== "__debugOffset")
+    Object.defineProperty(rx, key,  {
+      match: function (str) {
+        let res = regexp.match(str);
+
+        if (res
+        &&  rx.debugOffset
+        &&  rx.debugOffset[0] > rx.i
+        &&  rx.debugOffset[1] < rx.i) {
+            rx.debugOffset[2] = 
+            rx.debugOffset[2] + 1,
+            console.trace(`rx.${key}.match(${str})`);
+        }
+
+        return regexp.match(str);
+      },
+      get: function(){
+        if (rx.debugOffset
+        &&  rx.debugOffset[0] > rx.i
+        &&  rx.debugOffset[1] < rx.i) {
+            rx.debugOffset[2] = 
+            rx.debugOffset[2] + 1,
+            console.trace(`rx.${key}`);
+        }
+
+        return regexp;
+      },
+    }),
+    rx["_"+key] = regexp;
+  });
+
+  Object.defineProperty(rx, "debugOffset", {
+    set: function (indexArr) {
+      if (indexArr instanceof Array
+      &&  indexArr.length === 3
+      &&  indexArr.every(n =>
+                  typeof n === "number"
+                      && n === parseInt(n))
+      &&  indexArr[0] <= indexArr[1])
+      rx.__debugOffset = indexArr;
+    },
+    get: function(){
+      return rx.__debugOffset;
+    },
+  });
+
+  return rx;
+}())
 
 
   // -------------------------------------------
@@ -3877,7 +3931,10 @@ function getRegularExpressions() {
 
          unsafeProtocol: reUnsafeProtocol,
        safeDataProtocol: reSafeDataProtocol,
-  }
+
+            debugOffset: null,
+          __debugOffset: [0,0,0],
+  };
 }
 
 function getCodePointsList() {
