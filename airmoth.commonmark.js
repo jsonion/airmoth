@@ -814,8 +814,8 @@ function rxFromArray (rxStack, errorMap=null) {
            prev = bfr;
        else
        if (bfr instanceof Array
-       &&  bfr.every(str =>
-              typeof str === "string"))
+       &&  bfr.every((str) =>
+               typeof str === "string"))
            prev = bfr;
        else
            reportError("TYPE", "Function output invalid", expr, bfr);
@@ -855,8 +855,8 @@ function rxFromArray (rxStack, errorMap=null) {
        return bfr;
 
      case ("Array"):
-       if (bfr.every(str =>
-              typeof str === "string"))
+       if (bfr.every((str) =>
+               typeof str === "string"))
        return new RegExp(`(?:${bfr.join("|")})`,"g");
    }
 
@@ -875,7 +875,7 @@ function rxFromArray (rxStack, errorMap=null) {
     if (jsonion
     &&  jsonion.err
     &&  jsonion.err[ERR_TYPE])
-        console.error(jsonion.err[ERR_TYPE],
+        jsonion.err.log(jsonion.err[ERR_TYPE]+":",
                                      ...msg);
     else
         console.error(...msg);
@@ -893,33 +893,37 @@ function consoleLog (...params) {
   return params;
 }
 
-function consoleError (...params) {
-  var len=params.length, unflatten=params;
+function consoleError (...args) {
+  let len=args.length, unflatten=[...args];
  /////
   for (var i,j; i<len; i++) {
-    let param
-      = params[i];
+    let arg
+      = args[i];
 
-    if (typeof param === "string")
+    if (typeof arg === "string")
     continue;
 
-    if ((i < len-1) && param instanceof Array) {
+    if ((i < len-1) && arg instanceof Array
+                    && arg.length > 0) {
     if ((j=0)
-    &&  param.every((str) =>
-              typeof str === "string"
-              && j++ && params.splice(i,0,str))
+    &&  arg.every((str) =>
+            typeof str === "string"
+            && j++ && args.splice(i+j,0,str))
     &&  j>0
-    &&  params.splice(i,1)
-    && (len=len+j-1)  &&  (i=i+j-1))
+    &&  args.splice(i,1)
+    && (len=len+j-1) && (i=i+j-1))
     continue;
 
-    else throw jsonion.err.MISCONFIG;
+    else
+    if (j>0
+    &&  args.splice(i+1,j))
+    continue;
   }}
 
   if (!jsonion
   ||  !jsonion.err
   ||  !jsonion.err.suppress)
-  console.error(...params);
+  console.error(...args);
 
   return unflatten;
 }
