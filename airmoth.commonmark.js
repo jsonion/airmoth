@@ -76,10 +76,20 @@ const jstr = new Object({
 });
 
 Object.defineProperty(jstr.rx, "opStack", {
-  get: function () {
-    if (jstr.rx.__opStack instanceof RegExp)
-    return jstr.rx.__opStack;
-  },
+  get: (() => {
+    var opStack = jstr.rx.opStack;
+
+    if (opStack instanceof Array)
+        opStack = jsonion.rxFromArray(opStack);
+
+    return function(){
+      if (jstr.rx.__opStack instanceof RegExp)
+      return jstr.rx.__opStack;
+
+      if (opStack instanceof RegExp)
+      return opStack;
+    };
+  })(),
   set: function (rxStack) {
     rxStack = jsonion.rxFromArray(rxStack);
 
@@ -190,6 +200,19 @@ var configDoc = `
   medium <= m
 `;
 
+let cfg = require
+ && existsSync("./snowplants.cfg.json")
+ && readFileSync("./snowplants.cfg.json");
+
+let yGestAirmoth = { render, plugin };
+yGestAirmoth.cfg = (cfg                 &&
+                    jstr.validateConfig &&
+                    jstr.validateConfig(cfg))
+           ? cfg : (jstr.getConfigDefaults)  ?
+                    jstr.getConfigDefaults() : null;
+
+ ///////////////////////////////////////////////
+
 function renderTextLiteral (str) {
   //  get operator sign if encoded
   if (str[0] === "&")
@@ -207,21 +230,10 @@ function renderTextLiteral (str) {
   var match = jstr.rx.opStack.match(op);
 }
 
-var prev=[],
-    hContainer=[0],
-    hContents,
-    subsections={};
-
-let cfg = require
- && existsSync("./snowplants.cfg.json")
- && readFileSync("./snowplants.cfg.json");
-
-let yGestAirmoth = { render, plugin };
-yGestAirmoth.cfg = (cfg                 &&
-                    jstr.validateConfig &&
-                    jstr.validateConfig(cfg))
-           ? cfg : (jstr.getConfigDefaults)  ?
-                    jstr.getConfigDefaults() : null;
+var subsections={ },
+     hContainer=[0],
+     hContents,
+     prev = [];
 
  ///////////////////////////////////////////////
 
@@ -404,14 +416,12 @@ function diff (text, mod) {
           return [line, col];
       }
 
-      if (text[i] === "\n")
+      if (text[i] === "\n"
+      ||  text[i] === "\r") {
           line++,
            col=1;
-      else
-      if (text[i] === "\r") {
-          line++;
-           col=1;
-      if (text[i+1] === "\n")
+      if (text[i]   === "\r"
+      &&  text[i+1] === "\n")
           i++;
       }
       else
@@ -429,7 +439,9 @@ function validateConfig (cfg, ast=null) {
   let [moveSequences, sections, mappings]
     = jstr.getConfigDefaults();
 
-  let err=[]; jsonion.err.makeExecutable(err);
+  let err=[], sectionErr=[];
+  jsonion.err.makeExecutable(err);
+  jsonion.err.makeExecutable(sectionErr);
 
   if (!ast instanceof Object
   &&  !cfg instanceof Object)
@@ -544,9 +556,7 @@ function validateConfig (cfg, ast=null) {
   return (!err) ? true : err;
 
  ///////////////////////////////////////////////
-  var sectionErr=[]; jsonion.err
-     .makeExecutable(sectionErr);
- /////
+
   function sectionEntry (row, check=false, i=-1) {
     let [ heading, mapping, val ]=row;
     
@@ -758,11 +768,11 @@ function rxFromArray (rxStack, errorMap=null) {
   if (typeof rxStack === "string") {
   if (rxStack[0] === "/"
   ||  rxStack[0] === "^")
-      return new RegExp(rxStack,"g");
+      return factoryRegExp(rxStack);
   else
   if (rxStack.every(chr =>
       (prev.indexOf(chr) === -1
-      (prev.push(chr)))))
+  &&  (prev.push("\\"+chr)))))
       return new RegExp(`[${rxStack}]`,"g");
   }
 
@@ -781,6 +791,7 @@ function rxFromArray (rxStack, errorMap=null) {
       }
       else
       prev.length=0;
+      break;
 
     case ("object"):
       if (expr instanceof Array)
@@ -800,6 +811,7 @@ function rxFromArray (rxStack, errorMap=null) {
       }   continue   }
 
       reportError("TYPE", expr);
+      break;
 
     case ("function"):
       if (i === 0) {
@@ -851,19 +863,20 @@ function rxFromArray (rxStack, errorMap=null) {
   var bfr; prev.length=0;
  /////
   if (postProcessFn)
-  try {
-   do {
-    if (postProcessFn instanceof Array)
-    bfr = (!prev)
-        ?  postProcessFn[0](res)
-        :  postProcessFn[0](...res);
-    else
-    bfr = (!prev)
-        ?  postProcessFn(res)
-        :  postProcessFn(...res);
+  do {
+  if (postProcessFn instanceof Array)
+      bfr = (!prev)
+          ?  postProcessFn[0](res)
+          :  postProcessFn[0](...res);
+  else
+      bfr = (!prev)
+          ?  postProcessFn(res)
+          :  postProcessFn(...res);
+
+        throw bfr;
 
    if (typeof bfr === "string")
-       return new RegExp(bfr,"g");
+       return factoryRegExp(bfr);
 
    if (typeof bfr === "object")
    switch (bfr.constructor.name) {
@@ -873,7 +886,7 @@ function rxFromArray (rxStack, errorMap=null) {
      case ("Array"):
        if (bfr.every((str) =>
                typeof str === "string"))
-       return new RegExp(`(?:${bfr.join("|")})`,"g");
+       return factoryRegExp(bfr);
    }
 
    if (postProcessFn instanceof Array) {
@@ -901,10 +914,17 @@ function rxFromArray (rxStack, errorMap=null) {
    }
    else break;
 
-  } while (-1) }
-    catch (er) { reportError("MISCONFIG", er) }
+  } while (-1)
 
-  return new RegExp(`(?:${res.join("|")})`,"g");
+  return factoryRegExp(...res);
+
+  function factoryRegExp (...str) {
+    try {
+      return new RegExp(`(?:${str.join("|")})`,"g");
+    } catch (e) {
+      reportError("FORMAT", str, e);
+    }
+  }
 
   function reportError (ERR_TYPE, ...msg) {
     if (errorMap
@@ -1001,7 +1021,7 @@ function encodeRxSpecialChars (arrayOfStrings) {
     } while (-1)
 
     if (replace)
-        arrayOfStrings.splice(i,1,replace),
+        arrayOfStrings.splice(i, 1, replace),
         testRxCompiles = new RegExp(replace);
     else
         testRxCompiles = new RegExp(str); // ...
@@ -1010,3 +1030,5 @@ function encodeRxSpecialChars (arrayOfStrings) {
 
   return arrayOfStrings;
 }
+
+console.log(jstr.rx.opStack)
