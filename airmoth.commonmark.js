@@ -9,8 +9,8 @@ const jsonion = new Object({
 ///  ---------
  terminator: "|",
  rxFromArray,
- encode_unsafe: commonmark.lib.encode_unsafe,
-///
+ encode_unsafe:[encodeRxSpecialChars, 
+                commonmark.lib.encode_unsafe],
  log: consoleLog,
  err:{ TYPE: "Type mismatch",
        PATH: "Path not found",
@@ -51,7 +51,7 @@ const jstr = new Object({
     sameChr: /^(?<c>.)\k<c>+$/,
     heading: /h([1-6])/g,
     opStack: [jsonion.encode_unsafe,
-   "<=","=>", jsonion.delimiter, "^","&","-",">",":",".","@","#",timeRx, "[","]","=","<"],
+   "<=","=>", jsonion.delimiter, "*","^",":",".","&","-",">","@","#",timeRx, "[","]","=","<","!","\""],
     pick: function (...keys) {
       let res={};
       return keys.every(key => this[key]
@@ -143,7 +143,7 @@ var configDoc = `
 ## Sequence types
   \`@one-off\`, \`#continuous\`
 
-## Modifiers
+## Sequence modifiers
   \`:variation\`
   \`.modifier\`
   \`&insert\`
@@ -160,6 +160,7 @@ var configDoc = `
 ## Hype (modifer)
  \`.velocity\`
  \`.spring\`
+ \`.freeze\`
 
 ## Turns (modifier)
  \`.frontside\`
@@ -251,7 +252,9 @@ console.log(result);
  ///////////////////////////////////////////////
 // fs.writeFileSync('./.cache/snowplants.cfg.json', JSON.stringify(customer, null, 2));
 
-function plugin (node, entering) {
+function plugin (event) {
+  let { node, entering }=event;
+
   if (prev.length) {
   var [
   type, pos, str, lit, lvl, entering_ ]=prev;
@@ -281,20 +284,8 @@ function plugin (node, entering) {
   if (type)
   console.log(type, lvl, str, lit, entering);
 
-/*  
   if (pos)
-  console.log(type, entering,
-              "data-sourcepos:",
-              String(pos[0][0]) +
-              ":" +
-              String(pos[0][1]) +
-              "-" +
-              String(pos[1][0]) +
-              ":" +
-              String(pos[1][1]));
-  else
-  console.log(type, entering);
- */
+  console.log(String(pos[0||1][0||1]))
 
   prev = node;
 }
@@ -309,7 +300,7 @@ function getConfigDefaults__en () {
   ["h2", "addSequence", "[Add new sequence](javascript:newSequence)"],
   ["h2", "directionSubsets", "Direction subsets"],
   ["h2", "sequenceTypes", "Sequence types"],
-  ["h2", "modifiers", "Modifiers"],
+  ["h2", "modifiers", "Sequence modifiers"],
   ["h2", "phases",  "Phases (modifer)"],
   ["h2", "hype", "Hype (modifer)"],
   ["h2", "turns", "Turns (modifier)"],
@@ -352,6 +343,7 @@ function getConfigDefaults__en () {
       hype: {
         velocity: "velocity",
         spring: "spring",
+        freeze: "freeze",
       },
       turns: {
         frontside: "frontside",
@@ -894,7 +886,7 @@ function consoleLog (...params) {
 }
 
 function consoleError (...args) {
-  let len=args.length, unflatten=[...args];
+  var len=args.length, unflatten=[...args];
  /////
   for (var i,j; i<len; i++) {
     let arg
@@ -927,3 +919,48 @@ function consoleError (...args) {
 
   return unflatten;
 }
+
+function encodeRxSpecialChars (arrayOfStrings) {
+  if (!arrayOfStrings instanceof Array)
+  return;
+
+  let rxSet = /(?:\[|\]|\.)/g; // ...
+  let replacer
+    = Object.fromEntries(
+       rxSet.source
+            .substring(3, rxSet.source.length-1)
+            .split("|")
+            .map(chr => [chr[1],chr]));
+
+  var str, match, replace, testRxCompiles;
+  try {
+  for (var i=0,j; i<arrayOfStrings.length; i++) {
+    str = replace = arrayOfStrings[i];
+      j = 0;
+
+    if (typeof str !== "string")
+        continue;
+
+    do {
+    if ((match = rxSet.exec(str)) === null)
+        break;
+
+        replace
+      = replace.substring(0, match.index+j)
+      + replacer[ str[ match.index ]]
+      + replace.substring(match.index+j+1);
+
+    } while (-1)
+
+    if (replace)
+        arrayOfStrings.splice(i,1,replace),
+        testRxCompiles = new RegExp(replace);
+    else
+        testRxCompiles = new RegExp(str); // ...
+
+  }} catch (e) { throw e }
+
+  return arrayOfStrings;
+}
+
+console.log(encodeRxSpecialChars(["[","]",".","("]));
