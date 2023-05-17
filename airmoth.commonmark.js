@@ -9,8 +9,8 @@ const jsonion = new Object({
 ///  ---------
  terminator: "|",
  rxFromArray,
- encode_unsafe:[encodeRxSpecialChars, 
-                commonmark.lib.encode_unsafe],
+ encode_unsafe:[ encodeRxSpecialChars, 
+                 commonmark.lib.encode_unsafe ],
  log: consoleLog,
  err:{ TYPE: "Type mismatch",
        PATH: "Path not found",
@@ -782,6 +782,25 @@ function rxFromArray (rxStack, errorMap=null) {
       else
       prev.length=0;
 
+    case ("object"):
+      if (expr instanceof Array)
+      if (i === 0
+      &&  expr.every((fn) =>
+               typeof fn === "function")) {
+          postProcessFn = expr;
+          continue;
+      }
+
+      if (expr instanceof Array) {
+      if (expr.every((str) =>
+               typeof str === "string"))
+      for (let str of expr) {
+           res.push(str);
+          prev.push(str);
+      }   continue   }
+
+      reportError("TYPE", expr);
+
     case ("function"):
       if (i === 0) {
           postProcessFn = expr;
@@ -834,9 +853,14 @@ function rxFromArray (rxStack, errorMap=null) {
   if (postProcessFn)
   try {
    do {
-   if (!prev)
-        bfr = postProcessFn(res);
-   else bfr = postProcessFn(...res);
+    if (postProcessFn instanceof Array)
+    bfr = (!prev)
+        ?  postProcessFn[0](res)
+        :  postProcessFn[0](...res);
+    else
+    bfr = (!prev)
+        ?  postProcessFn(res)
+        :  postProcessFn(...res);
 
    if (typeof bfr === "string")
        return new RegExp(bfr,"g");
@@ -852,8 +876,31 @@ function rxFromArray (rxStack, errorMap=null) {
        return new RegExp(`(?:${bfr.join("|")})`,"g");
    }
 
-   if (prev) break;
-       prev = true;
+   if (postProcessFn instanceof Array) {
+   if (postProcessFn.length === 1) {
+   if (prev)
+       break;
+   else
+       prev=true;
+       continue;
+   }
+   else
+   if (postProcessFn.length > 1) {
+   if (prev)
+       postProcessFn.shift(),
+       prev=false;
+   else
+       prev=true;
+       continue;
+   }}
+   else
+   if (!postProcessFn instanceof Array)
+   if (!prev) {
+        prev = true;
+        continue;
+   }
+   else break;
+
   } while (-1) }
     catch (er) { reportError("MISCONFIG", er) }
 
@@ -861,14 +908,15 @@ function rxFromArray (rxStack, errorMap=null) {
 
   function reportError (ERR_TYPE, ...msg) {
     if (errorMap
-    &&  errorMap[ERR_TYPE])
-        errorMap[ERR_TYPE](...msg);
-    else
+    &&  typeof errorMap[ERR_TYPE] == "function")
+        return errorMap[ERR_TYPE](...msg);
+
     if (jsonion
     &&  jsonion.err
-    &&  jsonion.err[ERR_TYPE])
-        jsonion.err.log(jsonion.err[ERR_TYPE]+":",
-                                     ...msg);
+    &&  jsonion.err[ERR_TYPE]
+    &&  jsonion.err.log)
+        jsonion.err.log(
+        jsonion.err[ERR_TYPE]+":", ...msg);
     else
         console.error(...msg);
   }
@@ -962,5 +1010,3 @@ function encodeRxSpecialChars (arrayOfStrings) {
 
   return arrayOfStrings;
 }
-
-console.log(encodeRxSpecialChars(["[","]",".","("]));
