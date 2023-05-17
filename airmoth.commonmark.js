@@ -51,7 +51,7 @@ const jstr = new Object({
     sameChr: /^(?<c>.)\k<c>+$/,
     heading: /h([1-6])/g,
     opStack: [jsonion.encode_unsafe,
-   "<=","=>", jsonion.delimiter, "^","&","-",">",":",".","@","#",timeRx,"[","]","=","<"],
+   "<=","=>", jsonion.delimiter, "^","&","-",">",":",".","@","#",timeRx, "[","]","=","<"],
     pick: function (...keys) {
       let res={};
       return keys.every(key => this[key]
@@ -725,11 +725,12 @@ function render (ast) {
 
   while (event = walker.next()) {
       type = event.node.type;
+
+      this.plugin(event);
+
       if (this[type])
           this[type](event.node,
                      event.entering);
-
-      this.plugin(event.node, event.entering);
   }
 
   return this.buffer;
@@ -757,7 +758,7 @@ function attrs (node) {
 
 ////////////////////////////////////////////////
 
-function rxFromArray (rxStack) {
+function rxFromArray (rxStack, errorMap=null) {
   if (rxStack instanceof RegExp)
   return rxStack;
 
@@ -801,34 +802,39 @@ function rxFromArray (rxStack) {
           continue;
       }
 
-      var bfr;
-     /////
-      if (prev.length) {
+      if (!prev.length)
+          continue;
+
       len=prev.length, bfr=prev;
       try {
        do {
            bfr = expr(...bfr);
-       if (bfr
-       &&  bfr.length)
+       if (bfr) {
+       if (typeof bfr === "string")
            prev = bfr;
+       else
+       if (bfr instanceof Array
+       &&  bfr.every(str =>
+              typeof str === "string"))
+           prev = bfr;
+       else
+           reportError("TYPE", "Function output invalid", expr, bfr);
+       }
 
        if (typeof rxStack[i+1] === "function")
            expr = rxStack[(i=i+1)];
        else break;
        ///////
       } while (-0b01) }
-        catch (error) { jsonion.err.log(error) }
-
+        catch (error) { reportError("MISCONFIG", error) }
 
       if (typeof prev === "string")
           res.splice(i-len, len, prev),
-         prev=[];
+                                 prev=[];
       else
-      if (prev instanceof Array)
-          res.splice(i-len, len, ...prev),
-         ////////////////
-          prev.length=0;
-      }
+       res.splice(i-len, len, ...prev),
+     ////////////////
+      prev.length=0;
   }}
 
   var bfr; prev.length=0;
@@ -857,9 +863,23 @@ function rxFromArray (rxStack) {
    if (prev) break;
        prev = true;
   } while (-1) }
-    catch (er) { jsonion.err.log(er) }
+    catch (er) { reportError("MISCONFIG", er) }
 
   return new RegExp(`(?:${res.join("|")})`,"g");
+
+  function reportError (ERR_TYPE, ...msg) {
+    if (errorMap
+    &&  errorMap[ERR_TYPE])
+        errorMap[ERR_TYPE](...msg);
+    else
+    if (jsonion
+    &&  jsonion.err
+    &&  jsonion.err[ERR_TYPE])
+        console.error(jsonion.err[ERR_TYPE],
+                                     ...msg);
+    else
+        console.error(...msg);
+  }
 }
 
 ////////////////////////////////////////////////
