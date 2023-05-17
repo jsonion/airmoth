@@ -6,11 +6,11 @@ const commonmark
               || window.commonmark;
 
 const jsonion = new Object({
- /// ---------
+///  ---------
  terminator: "|",
  rxFromArray,
- encode_unsafe:
-    commonmark.lib.encode_unsafe,
+ encode_unsafe: commonmark.lib.encode_unsafe,
+///
  log: consoleLog,
  err:{ TYPE: "Type mismatch",
        PATH: "Path not found",
@@ -33,6 +33,7 @@ const jsonion = new Object({
 let time=4;
 let timeRx=(str => {
   var res=[];
+
   if (typeof str === "string"
           && str.length)
   for (let i=time; i>1; i--) {
@@ -40,6 +41,7 @@ let timeRx=(str => {
   }
 
   res.push(str);
+  return res;
 });
 
 const jstr = new Object({
@@ -48,7 +50,7 @@ const jstr = new Object({
     symbols: /[^\w\s[[:cntrl:]]]/g,
     sameChr: /^(?<c>.)\k<c>+$/,
     heading: /h([1-6])/g,
-    opStack: ["^","&","-",">",":",".","@","#",timeRx,"[","]"],
+    opStack: ["^","&","-",">",":",".","@","#",timeRx,"[","]","="],
     pick: function (...keys) {
       let res={};
       return keys.every(key => this[key]
@@ -58,13 +60,15 @@ const jstr = new Object({
 
   ///////////
  // methods
-//parseAlias,
-//parseModifier,
-//parseDefaultValue,
+/*
+  parseAlias,
+  parseModifier,
+  parseDefaultValue,
 
-//defineAlias,
-//defineModifier,
-//defineDefaultValue,
+  storeAlias,
+  storeModifier,
+  storeDefaultValue,
+ */
 
   validateConfig,
   getConfigDefaults: getConfigDefaults__en,
@@ -197,6 +201,8 @@ function renderTextLiteral (str) {
 
   if ((bfr = str.indexOf(" ")) >= 0)
         op = str.substring(0, bfr);
+
+  var match = jstr.rx.opStack.match(op);
 }
 
 var prev=[],
@@ -754,23 +760,22 @@ function rxFromArray (rxStack) {
   if (rxStack instanceof RegExp)
   return rxStack;
 
-  var pre=[];
+  var prev=[];
   if (typeof rxStack === "string") {
   if (rxStack[0] === "/"
   ||  rxStack[0] === "^")
       return new RegExp(rxStack,"g");
   else
   if (rxStack.every(chr =>
-       (pre.indexOf(chr) === -1
-       (pre.push(chr)))))
+      (prev.indexOf(chr) === -1
+      (prev.push(chr)))))
       return new RegExp(`[${rxStack}]`,"g");
   }
 
   if (!rxStack instanceof Array)
   return false;
-
-  var res=[], bfr, postProcessFn, pre=[], len,
-   encode=jsonion.encode_unsafe;
+                        prev.length=0;
+  var res=[], postProcessFn, bfr, len;
  /////
   for (let [i,expr] of rxStack.entries()) {
   switch (typeof expr) {
@@ -778,13 +783,10 @@ function rxFromArray (rxStack) {
       if (expr.length
       &&  expr !== jsonion.terminator) {
           res.push(expr);
-          pre.push(expr);
-      if (expr !== (bfr=encode(expr)))
-          res.push(bfr),
-          pre.push(bfr);
+         prev.push(expr);
       }
       else
-       pre.length=0;
+      prev.length=0;
 
     case ("function"):
       if (i === 0) {
@@ -800,38 +802,38 @@ function rxFromArray (rxStack) {
 
       var bfr;
      /////
-      if (pre.length) {
-      len=pre.length, bfr=[...pre];
+      if (prev.length) {
+      len=prev.length, bfr=prev;
       try {
        do {
-           bfr = str(...bfr);
+           bfr = expr(...bfr);
        if (bfr
        &&  bfr.length)
-           pre = bfr;
+           prev = bfr;
 
        if (typeof rxStack[i+1] === "function")
-            str = rxStack[(i=i+1)];
+           expr = rxStack[(i=i+1)];
        else break;
        ///////
-      } while (-1) }
-        catch (er) { jsonion.err.log(er) }
+      } while (-0b01) }
+        catch (error) { jsonion.err.log(error) }
 
-      if (pre instanceof Array)
-          res.splice(i-len, len, ...bfr);
+      if (prev instanceof Array)
+          res.splice(i-len, len, ...prev);
       else
-      if (typeof pre === "string")
-          res.splice(i-len, len, bfr);
-         ///////////////
-          pre.length=0;
+      if (typeof prev === "string")
+          res.splice(i-len, len, prev);
+         ////////////////
+          prev.length=0;
       }
   }}
 
-  var bfr, pre;
+  var bfr; prev.length=0;
  /////
   if (postProcessFn)
   try {
    do {
-   if (!pre)
+   if (!prev)
         bfr = postProcessFn(res);
    else bfr = postProcessFn(...res);
 
@@ -849,10 +851,10 @@ function rxFromArray (rxStack) {
        return new RegExp(`(?:${bfr.join("|")})`,"g");
    }
 
-   if (pre) break;
-       pre = true;
-  } while (1) }
-    catch (e) { jsonion.err.log(e) }
+   if (prev) break;
+       prev = true;
+  } while (-1) }
+    catch (er) { jsonion.err.log(er) }
 
   return new RegExp(`(?:${res.join("|")})`,"g");
 }
