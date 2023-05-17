@@ -50,7 +50,8 @@ const jstr = new Object({
     symbols: /[^\w\s[[:cntrl:]]]/g,
     sameChr: /^(?<c>.)\k<c>+$/,
     heading: /h([1-6])/g,
-    opStack: ["^","&","-",">",":",".","@","#",timeRx,"[","]","="],
+    opStack: [jsonion.encode_unsafe,
+   "<=","=>", jsonion.delimiter, "^","&","-",">",":",".","@","#",timeRx,"[","]","=","<"],
     pick: function (...keys) {
       let res={};
       return keys.every(key => this[key]
@@ -818,11 +819,13 @@ function rxFromArray (rxStack) {
       } while (-0b01) }
         catch (error) { jsonion.err.log(error) }
 
-      if (prev instanceof Array)
-          res.splice(i-len, len, ...prev);
-      else
+
       if (typeof prev === "string")
-          res.splice(i-len, len, prev);
+          res.splice(i-len, len, prev),
+         prev=[];
+      else
+      if (prev instanceof Array)
+          res.splice(i-len, len, ...prev),
          ////////////////
           prev.length=0;
       }
