@@ -20,7 +20,10 @@ const jsonion = new Object({
   MISCONFIG: "Misconfiguration",
    suppress: false,
         log: consoleError,
-   makeExecutable: function (errorMap) {
+   makeExec:
+  (typeof executableErrorMap === "function" &&
+          executableErrorMap)               ||
+   function (errorMap) {
    Object.entries(this).forEach(([e,str]) => {
    if (typeof str === "string")
        errorMap[e] = function (...msg) {
@@ -29,6 +32,10 @@ const jsonion = new Object({
       (!msg.length) ? str : `${str}:`, ...msg]);
    }})}
 }});
+
+
+jsonion.err.makeExec(jsonion.err);
+
 
 let time=4;
 let timeRx=(str => {
@@ -51,7 +58,7 @@ const jstr = new Object({
     sameChr: /^(?<c>.)\k<c>+$/,
     heading: /h([1-6])/g,
     opStack: [jsonion.encode_unsafe,
-   "<=","=>", jsonion.delimiter, "*","^",":",".","&","-",">","@","#",timeRx, "[","]","=","<","!","\""],
+   "<=","=>", jsonion.delimiter, "*","^",":",".","&","-",">","@","#",timeRx, "[","]","=","<","!","\"","\'","\`"],
     pick: function (...keys) {
       let res={};
       return keys.every(key => this[key]
@@ -112,7 +119,7 @@ var configDoc = `
 ... default: \`#shift-vibe\`
 
 ## shift-vibe &&&& ^^^^
-( .velocity-boost, .height, .freeze )
+( .velocity-boost, .height, .freeze, .twitch )
 ... default: \`#tap\`
 
 - "Just vibing"
@@ -171,6 +178,7 @@ var configDoc = `
  \`.velocity\`
  \`.spring\`
  \`.freeze\`
+ \`.twitch\`
 
 ## Turns (modifier)
  \`.frontside\`
@@ -213,11 +221,16 @@ yGestAirmoth.cfg = (cfg                 &&
 
  ///////////////////////////////////////////////
 
+var subsections={ },
+     hContainer=[0],
+     hContents,
+     prev = [];
+
 function renderTextLiteral (str) {
   //  get operator sign if encoded
   if (str[0] === "&")
 
-  var pre, op, bfr
+  var pre, op, bfr;
  /////
   if (prev) {
   if ((bfr = prev.lastIndexOf(" ")) >= 0)
@@ -228,12 +241,11 @@ function renderTextLiteral (str) {
         op = str.substring(0, bfr);
 
   var match = jstr.rx.opStack.match(op);
+  if (match)
+  switch (match[0]) {
+    case "": 
+  }
 }
-
-var subsections={ },
-     hContainer=[0],
-     hContents,
-     prev = [];
 
  ///////////////////////////////////////////////
 
@@ -266,16 +278,15 @@ console.log(result);
 
 function plugin (event) {
   let { node, entering }=event;
+  var pos = node.sourcepos;
+  var str = node._string_content;
+  var lit = node._literal;
+  var lvl = node.level;
 
-  if (prev.length) {
+  if (prev.length
+  &&  node.type === "text")
   var [
   type, pos, str, lit, lvl, entering_ ]=prev;
-
-
-       pos = prev.sourcepos,
-       str = prev._string_content,
-       lit = prev._literal,
-       lvl = prev.level;
 
   switch (type) {
     case "heading":
@@ -283,7 +294,6 @@ function plugin (event) {
     if (!hContainer[0]
     ||   hContainer[0] === lvl) {
 
-         node.
          hContainer.splice(1,2,),
          hContents = null;
 
@@ -291,7 +301,7 @@ function plugin (event) {
     else
     if (!hContents)
          hContents = hLevel;
-  }}
+  }
 
   if (type)
   console.log(type, lvl, str, lit, entering);
@@ -512,14 +522,14 @@ function validateConfig (cfg, ast=null) {
     let compare = mappings[category];
 
     if (typeof compare === "undefined")
-    return err.MISCONFIG(`cfg.mappings[${category}]`);
+    return err.MISCONFIG(`cfg.mapping.${category}`);
 
     Object.entries(object)
           .forEach(([key,val]) => {
       let compareVal = compare[key];
 
       if (typeof compareVal === "undefined")
-      return err.MISCONFIG(`cfg.mappings[${category}][${key}]`);
+      return err.MISCONFIG(`cfg.mappings.${category}.${key}`);
 
       mappingEntry(key, val, compareVal,
                    category, object);
@@ -531,7 +541,7 @@ function validateConfig (cfg, ast=null) {
   Object.keys(obj).forEach(key =>
     (key[0] === "_" || optional.find(key))
      ? false
-     : err.PATH(`cfg.mappings[${c}][${key}]`)
+     : err.PATH(`cfg.mappings.${c}.${key}`)
   ));
 
 
@@ -613,16 +623,16 @@ function validateConfig (cfg, ast=null) {
 
     if (hContainer[0] === hLevel
     && !subsections[section])
-    err.SCOPE(`cfg.sections[${section}]`);
+    err.SCOPE(`cfg.sections[${i}]:`, section);
     
     else
     if (hContainer[0] !== hLevel
-    &&  0<(j = subsections[section]
-               .findIndex((compare,i,self) => {
-                  if (compare[1] === mapping) {
-                       self.splice(i,1);
-                       return true;
-                }})
+    &&  0 > (j=subsections[section]
+              .findIndex((compare,i,self) => {
+                      if (compare[1]===mapping) {
+                          self.splice(i,1);
+                          return true;
+             }})
     ))
     err.SCOPE(`cfg.sections[${section}][${i}]:`,
                                      mapping);
@@ -641,24 +651,24 @@ function validateConfig (cfg, ast=null) {
     let section
       = hContainer[1];
 
-    err.PATH("cfg.sections[]:"
-           + `${section} ${mapping}`);
+    err.PATH("cfg.sections[]:", section,
+                                mapping);
   }
 
   function mappingEntry (key, val, compare,
                          category, catObj) {
     if (!val instanceof Array)
-    return err.TYPE(`cfg.mappings[${category}][${key}] !Array`);
+    return err.TYPE(`cfg.mappings.${category}.${key}`, "!Array");
 
     if (typeof val[0] !== "string")
-    err.TYPE(`cfg.mappings[${category}][${key}][0] !String`);
+    err.TYPE(`cfg.mappings.${category}.${key}[0]`, "!String");
 
     switch (category) {
       case ("sequenceTypes"):
       case ("modifiers"):
       case ("phases"):
         if (typeof val[1] !== "string")
-        err.TYPE(`cfg.mappings[${category}][${key}][1] !String`);
+        err.TYPE(`cfg.mappings.${category}.${key}[1]`, "!String");
 
         var bfr;
        /////
@@ -667,16 +677,16 @@ function validateConfig (cfg, ast=null) {
         ||  key === "mid"
         ||  key === "end")) {
         if (key === "start" && val.length !== 1)
-            err.SCOPE(`cfg.mappings[${category}][${key}][0]`, `"${val}".length!==1`);
+            err.SCOPE(`cfg.mappings.${category}.${key}[0]`, `"${val}".length!==1`);
 
         if (key === "mid"   && val.length !== 2)
-            err.SCOPE(`cfg.mappings[${category}][${key}][0]`, `"${val}".length!==2`);
+            err.SCOPE(`cfg.mappings.${category}.${key}[0]`, `"${val}".length!==2`);
 
         if (key === "end"   && val.length !== 3)
-            err.SCOPE(`cfg.mappings[${category}][${key}][0]`, `"${val}".length!==3`);
+            err.SCOPE(`cfg.mappings.${category}.${key}[0]`, `"${val}".length!==3`);
 
         if (!val.match(rx.sameChr))
-             err.SCOPE(`cfg.mappings[${category}][${key}][0]`, `!"${val}".match(${rx.sameChr.source}`);
+             err.SCOPE(`cfg.mappings.${category}.${key}[0]`, `!"${val}".match(${rx.sameChr.source}`);
 
         if (key !== "start")
             bfr = catObj["start"]    &&
@@ -684,30 +694,30 @@ function validateConfig (cfg, ast=null) {
                   catObj["start"][0][0];
         if (bfr
         &&  bfr !== val[0][0])
-            err.SCOPE(`cfg.mappings[${category}][${key}][0]`, `"${val[0]}"!=="${bfr}"`);
+            err.SCOPE(`cfg.mappings.${category}.${key}[0]`, `"${val[0]}"!=="${bfr}"`);
         }
         else
         if (val[0].match(rx.symbols))
-            err.SCOPE(`cfg.mappings[${category}][${key}][0]`, `!"${val}".match(${rx.symbols.source}`);
+            err.SCOPE(`cfg.mappings.${category}.${key}[0]`, `!"${val}".match(${rx.symbols.source}`);
 
       default:
         if (typeof val[0] !== "string")
-        err.TYPE(`cfg.mappings[${category}][${key}][0]`, "!String");
+        err.TYPE(`cfg.mappings.${category}.${key}[0]`, "!String");
     }
 
     let index=val.slice(-2);
    /////
     if (typeof index[0] !== "number")
-        err.TYPE(`cfg.mappings[${category}][${key}][-2]`, "!Number", "<offset_index>");
+        err.TYPE(`cfg.mappings.${category}.${key}[-2]`, "!Number", "<offset_index>");
     else
     if (index[0] < 0)
-        err.SCOPE(`cfg.mappings[${category}][${key}][-2]`, `${index[0]}<0`, "<offset_index>");
+        err.SCOPE(`cfg.mappings.${category}.${key}[-2]`, `${index[0]}<0`, "<offset_index>");
 
     if (typeof index[1] !== "number")
-        err.TYPE(`cfg.mappings[${category}][${key}][-1]`, "!Number", "<offset_index>");
+        err.TYPE(`cfg.mappings.${category}.${key}[-1]`, "!Number", "<offset_index>");
     else
     if (index[1] < 0)
-        err.SCOPE(`cfg.mappings[${category}][${key}][-1]`, `${index[0]}<0`, "<offset_index>");
+        err.SCOPE(`cfg.mappings.${category}.${key}[-1]`, `${index[0]}<0`, "<offset_index>");
  
     return;
   }
@@ -944,48 +954,108 @@ function rxFromArray (rxStack, errorMap=null) {
 
 ////////////////////////////////////////////////
 
+function executableErrorMap (errorMap) {
+  if (!errorMap instanceof Array)
+  return;
+
+  var self, depth=1;
+  if (errorMap === this) {
+      errorMap = new Array();
+      var self = this;
+  }
+
+  Object.entries(this).forEach(([key,str]) => {
+  if (typeof str === "string") {
+      errorMap[key]=function (...msg) {
+      depth=1;
+
+      for (var j,i=0; i<msg.length; i++) {
+        if (j
+        || (typeof msg[i] !== "string"
+        && (j = 1))) {
+            msg[i] = [evalArg(msg[i])];
+        if (msg[i].length === 1
+        &&  msg[i][0] instanceof Array)
+            msg[i]
+          = msg[i][0];
+      }}
+
+      errorMap.push([key,
+     (!msg.length) ? str : `${str}:`, ...msg]);
+
+          if (jsonion.err.log)
+      return (jsonion.err.log(errorMap.at(-1)));
+  }}
+  else
+  if (self)
+      errorMap[key]=str || (!"function");
+  });
+
+  if (self)
+  jsonion.err = errorMap;
+
+ ///////////
+
+  function evalArg (obj) {
+    if (obj === null)
+        return null;
+    if (jsonion.err.reportArgVAlue
+    && (typeof obj === "string"
+    ||  typeof obj === "number"
+    ||  typeof obj === "boolean"))
+        return obj;
+
+    var res;
+    if (typeof obj !== "object") {
+    if (obj.length
+    ||  obj.length === 0)
+        res = [typeof obj, obj.length];
+    else
+        res = typeof obj;
+    }
+    else
+    if (typeof obj === "object") {
+        res = [obj.constructor.name, obj.length];
+    if (!!obj[Symbol.iterator]
+    && `${obj[Symbol.iterator]}`.substring(9,15)
+                                   === "values") {  
+    if (depth <= jsonion.err.reportArgDepth)
+    for (let val of obj) {
+         res.push(evalArg(val));
+    }}
+    else
+    if (Object.entries(obj).length)
+    for (let [key,val] of Object.entries(obj)) {
+         if (depth < jsonion.err.reportArgDepth)
+         res.push([key].concat(evalArg(val)));
+
+         else
+         res.push(key);
+    }}
+    return res;
+  }
+}
+
 function consoleLog (...params) {
-  if (!jsonion
-  ||  !jsonion.err
-  ||  !jsonion.err.suppress)
-  console.error(...params);
+  if (typeof jsonion      === "undefined"
+  || (typeof jsonion.mode === "undefined"
+  ||         jsonion.mode !== "production")
+  && (!jsonion.err
+  ||  !jsonion.err.suppress))
+  console.log(...params);
 
   return params;
 }
 
-function consoleError (...args) {
-  var len=args.length, unflatten=[...args];
- /////
-  for (var i,j; i<len; i++) {
-    let arg
-      = args[i];
+function consoleError (...params) {
+  if (typeof jsonion      === "undefined"
+  || (typeof jsonion.mode === "undefined"
+  ||         jsonion.mode !== "production")
+  && (!jsonion.err
+  ||  !jsonion.err.suppress))
+  console.error(...params);
 
-    if (typeof arg === "string")
-    continue;
-
-    if ((i < len-1) && arg instanceof Array
-                    && arg.length > 0) {
-    if ((j=0)
-    &&  arg.every((str) =>
-            typeof str === "string"
-            && j++ && args.splice(i+j,0,str))
-    &&  j>0
-    &&  args.splice(i,1)
-    && (len=len+j-1) && (i=i+j-1))
-    continue;
-
-    else
-    if (j>0
-    &&  args.splice(i+1,j))
-    continue;
-  }}
-
-  if (!jsonion
-  ||  !jsonion.err
-  ||  !jsonion.err.suppress)
-  console.error(...args);
-
-  return unflatten;
+  return params;
 }
 
 function encodeRxSpecialChars (arrayOfStrings) {
