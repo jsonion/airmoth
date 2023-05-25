@@ -58,8 +58,8 @@ return Object.assign(jsonion, {
   ///////////
  // runtime
 
-  onLoad: (execFn) => setTimeout(execFn, 20), /*
-   … addEventListener("DOMContentLoaded")   */
+  onLoad: (execFn)=>setTimeout(execFn, 20), /*
+   … addEventListener("DOMContentLoaded") */
 
   ////////////
  // backbone
@@ -76,7 +76,8 @@ return Object.assign(jsonion, {
   },
 
   rx: {
-    fnName: /(?:(class|function\**) ([^\s\{]+|[^\s\(]+)|\([^\)]*\)\s*=>\s*{)/g,
+      fnName: /(?:(class|function\**) ([^\s\{]+|[^\s\(]+)|\([^\)]*\)\s*=>\s*{)/g,
+    classExt: /class (.+) (?:extends (.+) \{|\{)/g,
   },
 
   log: void function(){},
@@ -195,10 +196,10 @@ class ActionKeyframe {
     }}
 
     Object.assign(this, {
-      action: actionLabel,
-      appCtx: appContext,
-      framerate: framerate,
-      framerateMs: 1000 / Math.abs(framerate),
+       action: actionLabel,
+       appCtx: appContext,
+       framerate: framerate,
+       framerateMs: 1000 / Math.abs(framerate),
     }, params);
   }
 
@@ -248,9 +249,9 @@ class ScreenRecorder {
     });
     
     Object.assign(this.listener, {
-       pointerMotionFilter: new MotionFilter(),
-         wheelMotionFilter: new MotionFilter(),
-          zoomMotionFilter: new MotionFilter(),
+      pointerMotionFilter: new MotionFilter(),
+        wheelMotionFilter: new MotionFilter(),
+         zoomMotionFilter: new MotionFilter(),
     });
 }}
 
@@ -387,15 +388,32 @@ class SublimeText extends InputActivity {}
     ////////////////
 class ArrayWrapper {
   constructor (array, returnExecFn=null,
-                     classOverride=true,
-                     attachIndexes=true,
-                      inheritProps=[]) {
+                      classOverride=true,
+                      attachIndexes=true,
+                       inheritProps=[]) {
+    if (array instanceof ArrayWrapper) {
+    //  check for equal configuration in case
+    if (array.returnExecFn  === returnExecFn
+    &&  array.classOverride === classOverride
+    &&  array.attachIndexes === attachIndexes
+    && (
+       (!array.inheritProps instanceof Array
+    &&   array.inheritProps === inheritProps)
+    ||  (array.inheritProps instanceof Array
+    &&   array.inheritProps.every((val,i) =>
+               inheritProps[i] === val))))
+         return array;
+
+         else 
+         array = array.instance;
+    }
+
     this.classOverride = !!classOverride; // ext
    //////
-    this.instance = array instanceof Array
-                                  && array
-    || new Array();
-    
+    this.instance = (array instanceof Array
+                                   && array)
+    ||  (array = new Array());
+
    /////
     if (inheritProps instanceof Array)
     this.inheritProps = inheritProps;
@@ -410,28 +428,32 @@ class ArrayWrapper {
              && attachIndexes
              || true;
 
+    if (typeof returnExecFn === "function"
+            && returnExecFn.prototype)
+          this.returnExecFn = returnExecFn;
+   /////
+    if (typeof this.returnExecFn === "function"
+    &&         this.returnExecFn.prototype) {
+         ////
+               this.returnExecFn.bind(arr);
+        return ArrayWrapper
+              .bind(this.instance,
+                    this.returnExecFn,
+                    this.inheritProps,
+                    this.classOverride,
+                    this.attachIndexes);
+    }
+    else {
     ArrayWrapper.bind(this.instance,
                       this,
                       this.inheritProps,
                       this.classOverride,
                       this.attachIndexes);
-
-    if (typeof returnExecFn === "function"
-            && returnExecFn.prototype)
-          this.returnExecFn = returnExecFn;
-   /////
-    if ((typeof this.returnExecFn === "function"
-    &&          this.returnExecFn.prototype)) {
-         /////
-                this.returnExecFn.bind(arr);
-         return ArrayWrapper
-               .bind(this.instance,
-                     this.returnExecFn,
-                     this.propsList,
-                     this.classOverride);
+    if (Object
+       .hasOwnProperty(this, "returnExecFn"))
+                       this.returnExecFn
+                             = undefined;
     }
-    else this.returnExecFn
-               = undefined;
   }
 
          bind(){/*  ...  try  ...  */}
@@ -439,8 +461,7 @@ class ArrayWrapper {
                                 classOverride,
                                 attachIndexes) {
 
-    console.log("bind", arguments);
-    console.log(object.constructor.nameprototype);
+    console.trace(typeof object, object, eval(object.constructor.name));
     if (!object
     ||  !wrapper
     ||  typeof object  !== "object"
@@ -448,8 +469,8 @@ class ArrayWrapper {
     &&  typeof wrapper !== "function"))
     jsonion.cur = [ArrayWrapper, "bind"],
     jsonion
-   .err.TYPE(["array",  [  array  ]],
-             ["wrapper",[ wrapper ]],
+   .err.TYPE(["array",  [object ]],
+             ["wrapper",[wrapper]],
              ["inheritProps", [inheritProps]],
              ["classOverride",[classOverride]],
              ["attachIndexes",[attachIndexes]]);
@@ -461,26 +482,44 @@ class ArrayWrapper {
                 && inheritProps.filter(prop =>
                    typeof prop === "string");
 
-    var wrapperProps, missingProps=[],
-                       ignoreProps=["length", "push", "unshift", "concat", "splice", "shift", "pop", "copyWithin"];
-    {
-      let wrapperCls
-        = eval(wrapper.constructor.name);
+    var wrapperProps, keys, missingProps=[],
+                             ignoreProps=["length", "push", "unshift", "concat", "splice", "shift", "pop", "copyWithin"];
 
-      var objectCls
-        = eval(object.constructor.name);
+  { ////////////////////////////////////////////
 
-      var prototype
-        = objectCls.prototype;
+    let objectCls
+      = eval(object.constructor.name);
 
-    if  (!inheritProps.length)
-          inheritProps
-        = Object.getOwnPropertyNames(prototype);
+    let wrapperCls
+      = eval(wrapper.constructor.name);
 
-          wrapperProps
-        = Object.getOwnPropertyNames(wrapperCls
-                                    .prototype);
-    }
+     ///
+        wrapperProps
+      = Object.getOwnPropertyNames(wrapperCls
+                                  .prototype);
+    var prototype
+      = objectCls.prototype;
+
+    if (!inheritProps.length) {
+        keys
+      = Object.getOwnPropertyNames(object);
+
+        inheritProps
+      = Object.getOwnPropertyNames(prototype);
+
+    //  bind all available properties
+    if (objectCls !== Array)
+    do {
+    let clsProto = Array.prototype;
+    let clsProps
+      = Object.getOwnPropertyNames(arrProto);
+
+        inheritProps
+       .concat(arrProto)
+       .filter((val, index, self) =>
+                self.indexOf(val) === index);
+
+  }}}  /////////////////////////////////////////
 
      //
     //  assign to wrapper
@@ -547,8 +586,15 @@ class ArrayWrapper {
                i<object.length + n; i++) {
         if (!object.hasOwnProperty(i))
              Object.defineProperty(wrapper, i, {
-                get: () => object[i],
-                set: (val) => (object[i] = val),
+               get: () => object[i],
+               set: (val) => (object[i] = val),
+        }),  Object.defineProperty(wrapper,
+                                  -(i + 1), {
+               get: () =>
+                 object[object.length-i],
+               set: (val) => (
+                 object[object.length-i] = val
+               ),
         });
       }
     }
@@ -597,6 +643,63 @@ class ArrayWrapper {
       return object.splice(i, del, ...vals);
     }}
   }
+
+  static getClassExtensions = new ArrayWrapper([],
+    (classObj) => {
+      jsonion.cur = [ArrayWrapper,
+                    "getClassExtensions"];
+      try {
+      switch (typeof classObj) {
+        case "string":
+          classObj
+        = eval(classObj);
+          break;
+
+        case "object":
+          classObj
+        = eval(classObj.constructor.name);
+          break;
+
+        case "function":
+          try {
+          if (typeof classObj
+                    .arguments === "object")
+              return [Function];
+          } catch (e) {}
+      }}    catch (e) {}
+
+      if (typeof classObj !== "function") {
+          jsonion.err.MISCONFIG
+         ("Class not found:", classObj);
+          return;
+      }
+
+      let entryExists = this.find(row => 
+                     classObj === row[0]);
+      if (entryExists) return entryExists;
+
+      var rowEntries=[[classObj]],
+             bfr, rx=jsonion.rx.classExt;
+      do {
+      if (!(bfr = `${classObj}`.match(rx))
+      ||  !(bfr[2]))
+          break;
+
+          classObj = eval(bfr[2]);
+          rowEntries
+            .forEach(row => row.push(classObj));
+
+      if (bfr = this.find((row) =>
+                           row[0] === classObj)) {
+          rowEntries.every(row =>
+                           row.concat(bfr));
+          break;
+      }}  while (true)
+
+      this.concat(rowEntries);
+    },
+    false, false, ["push", "concat", "find"],
+  );
 }
 
 class reactiveArray extends Array {
@@ -855,12 +958,17 @@ class cursorArray extends reactiveArray {
     else
     if (offset_removed) {}
 
+    if (!cursorArrayPath)
+         cursorArrayPath = [this.get()];
+    else cursorArrayPath.unshift(this());
+
     if (parentNode instanceof cursorArray
     ||  parentNode instanceof reactiveArray)
         parentNode
        .reactiveRefresh(arguments[0],
                         arguments[1],
-                        arguments[2]);
+                        arguments[2],
+                        arguments[3]);
     else
     this.subscribers.forEach(fn =>
                              fn(arguments[0],
@@ -898,7 +1006,7 @@ class cursorArray extends reactiveArray {
     if (i < 0)
         i = (this.length + i) % this.length;
 
-    return [i, this.reactiveCallback(i)];
+    return [i, this.reactiveCallback(i)]; // …
   }
 
   append (...params) {
@@ -1018,7 +1126,7 @@ class cursorArray extends reactiveArray {
 
     let parentArray = this.parentArray;
 
-    if (parentArray instanceof cursorArray
+    if (parentArray instanceof cursorArray ///
     ||  parentArray instanceof reactiveArray)
     return parentArray.subscribe(fn);
 
@@ -1169,7 +1277,7 @@ class Workspaces extends AppContext {
    class executableArray extends ArrayWrapper {}
 function executableErrorMap (errorMap) {
   if (!errorMap instanceof Array
-  ||  !errorMap instanceof executableArray)
+  &&  !errorMap instanceof executableArray)
   return;
 
   var self, depth=1, throws;
@@ -1178,8 +1286,9 @@ function executableErrorMap (errorMap) {
       var self = this;
   }
   else
-  errorMap =
-       new executableArray(errorMap);
+  if (!errorMap instanceof executableArray)
+       errorMap =
+            new executableArray(errorMap);
 
   console.log(errorMap instanceof Array);
   console.log(errorMap instanceof ArrayWrapper);
