@@ -7,23 +7,29 @@ const commonmark
 
 const jsonion = new Object({
 ///  ---------
- terminator: "|",
+ rxDelimiter:"|",
+
+ rx: {
+   fnName: /(?:(class|function\**) ([^\s\{]+|[^\s\(]+)|\([^\)]*\)\s*=>\s*{)/g,
+ },
  rxFromArray,
  encode_unsafe:[ encodeRxSpecialChars, 
                  commonmark.lib.encode_unsafe ],
+
  log: consoleLog,
  err:{ TYPE: "Type mismatch",
        PATH: "Path not found",
       INPUT: "Invalid input parameter",
       SCOPE: "Value out of scope",
      FORMAT: "Value format invalid",
+     OUTPUT: "Function output invalid",
   MISCONFIG: "Misconfiguration",
    suppress: false,
         log: consoleError,
    makeExec:
   (typeof executableErrorMap === "function" &&
           executableErrorMap)               ||
-   function (errorMap) {
+   function (errorMap = this) {
    Object.entries(this).forEach(([e,str]) => {
    if (typeof str === "string")
        errorMap[e] = function (...msg) {
@@ -31,43 +37,38 @@ const jsonion = new Object({
        errorMap.push([e,
       (!msg.length) ? str : `${str}:`, ...msg]);
    }})}
-}});
-
-
-jsonion.err.makeExec(jsonion.err);
-
-
-let time=4;
-let timeRx=(str => {
-  var res=[];
-
-  if (typeof str === "string"
-          && str.length)
-  for (let i=time; i>1; i--) {
-       res.push(str.repeat(i));
-  }
-
-  res.push(str);
-  return res;
-});
+}}); jsonion.err.makeExec();
 
 const jstr = new Object({
  ///  ----
+  mdParser: void null,
+  time: [2,4],
+
   rx: {
     symbols: /[^\w\s[[:cntrl:]]]/g,
     sameChr: /^(?<c>.)\k<c>+$/,
     heading: /h([1-6])/g,
-    opStack: [jsonion.encode_unsafe,
-   "<=","=>", jsonion.delimiter, "*","^",":",".","&","-",">","@","#",timeRx, "[","]","=","<","!","\"","\'","\`"],
+    opStack: ["<=","=>", "*","^",":",".","&","-",">","@","#", "[","]","=","<","!","\"","\'","\`"],
     pick: function (...keys) {
       let res={};
       return keys.every(key => this[key]
                 && (res[key] = this[key]))
                 && res;
   }},
+  timeRxReplacer: (str => {
+    var res=[];
+    if (typeof str === "string"
+            && str.length)
+    for (let i=time; i>1; i--) {
+         res.push(str.repeat(i));
+    }
 
-  ///////////
- // methods
+    res.push(str);
+    return res;
+  }),
+
+  //////////////////////
+ // method names draft
 /*
   parseAlias,
   parseModifier,
@@ -78,33 +79,6 @@ const jstr = new Object({
   storeDefaultValue,
  */
 
-  validateConfig,
-  getConfigDefaults: getConfigDefaults__en,
-});
-
-Object.defineProperty(jstr.rx, "opStack", {
-  get: (() => {
-    var opStack = jstr.rx.opStack;
-
-    if (opStack instanceof Array)
-        opStack = jsonion.rxFromArray(opStack);
-
-    return function(){
-      if (jstr.rx.__opStack instanceof RegExp)
-      return jstr.rx.__opStack;
-
-      if (opStack instanceof RegExp)
-      return opStack;
-    };
-  })(),
-  set: function (rxStack) {
-    rxStack = jsonion.rxFromArray(rxStack);
-
-    if (rxStack instanceof RegExp)
-    jstr.rx.__opStack = rxStack;
-
-    return rxStack;
-  },
 });
 
 var configDoc = `
@@ -157,12 +131,12 @@ var configDoc = `
  - split-frontal: \`ws\`
  - split-sideways: \`ad\`
 
-## Sequence types
+## [Sequence types](http:bunch.jstr.co)
   \`@one-off\`, \`#continuous\`
 
 ## Sequence modifiers
-  \`:variation\`
-  \`.modifier\`
+- \`:variation\`
+- \`.modifier\`
   \`&insert\`
   \`-transition\`
   \`>reposition\`
@@ -208,25 +182,251 @@ var configDoc = `
   medium <= m
 `;
 
-let cfg = require
- && existsSync("./snowplants.cfg.json")
- && readFileSync("./snowplants.cfg.json");
+class jstrParseMd {
+ ///////////////////////////////////////////////
 
-let yGestAirmoth = { render, plugin };
-yGestAirmoth.cfg = (cfg                 &&
-                    jstr.validateConfig &&
-                    jstr.validateConfig(cfg))
-           ? cfg : (jstr.getConfigDefaults)  ?
-                    jstr.getConfigDefaults() : null;
+    subsections={ };         curPos=[];
+     hContainer=[0];         curContainer=[];
+     hContents;              curNodeType="";
+
+    containerData=[];
 
  ///////////////////////////////////////////////
 
-var subsections={ },
-     hContainer=[0],
-     hContents,
-     prev = [];
+           renderPlugin = renderMdPlugin;
+     setContainerHeader = setContainerHeader;
+  finalizeContainerData = finalizeContainerData;
+       parseTextLiteral = parseTextLiteral;
 
-function renderTextLiteral (str) {
+      getConfigDefaults = getConfigDefaults__en;
+         validateConfig = validateConfig;
+}
+
+var cfg = require
+ && existsSync("./snowplants.cfg.json")
+ && readFileSync("./snowplants.cfg.json");
+
+let yGestAirmoth
+  = { render, plugin: jstrParseMd };
+
+if (!cfg)
+    yGestAirmoth.cfg
+    = cfg
+    = jstrParseMd.getConfigDefaults(cfg);
+else {
+if (jstrParseMd.validateConfig 
+&&  jstrParseMd.validateConfig(cfg))
+    yGestAirmoth.cfg = cfg;
+else
+    jsonion.err.MISCONFIG(false, cfg);
+}
+
+var writer
+  = Object.assign(commonmark.HtmlRenderer(
+                      { sourcepos: false }),
+                      {   yGestAirmoth   });
+
+var reader = new commonmark.Parser();
+    reader.inlineParser.match = function (re) {
+    var m = re.exec(this.subject.slice(this.pos));
+    if (m === null)
+        return null;
+    else
+        this.pos += m.index + m[0].length;
+        return m[0];
+
+    console.log(re.source);
+},  commonmark.lib.rx.debugOffset=[0,0,0];
+/*  console.log(reader.inlineParser.match,
+         typeof reader.inlineParser.match);
+    console.log(commonmark.lib.rx.debugOffset,
+                commonmark.lib.rx.debugOffset);
+///                                           */
+var parsed = reader.parse(configDoc);
+var result = writer.render(parsed);
+
+ ///////////////////////////////////////////////
+// fs.writeFileSync('./.cache/snowplants.cfg.json', JSON.stringify(customer, null, 2));
+
+function renderMdPlugin (event) {
+  let { node, entering }=event;
+
+  if (entering)
+  console.log(node.type, node.sourcepos);
+  
+  else
+  console.log("/"+node.type);
+
+  switch (node.type) {
+    case "heading":
+    case "paragraph":
+    case "list":
+    case "item":
+      if (entering)
+      this.setContainerHeader(event);
+
+      else
+      this.finalizeContainerData(node.type);
+      break;
+
+    case "strong":
+      this.containerData.push("*");
+      break;
+
+    case "emph":
+      this.containerData.push("**");
+      break;
+
+    case "block_quote":
+    case "image":
+    case "custom_inline":
+    case "custom_block":
+      if (entering)
+      this.setContainerHeader(event, "--skip");
+
+      else
+      this.finalizeContainerData("--skip");
+      break;
+
+    case ("link"):
+      if (entering)
+      this.esc(node.destination),
+      this.esc(node.title);
+      break;
+
+    case ("text"):
+      this.renderTextLiteral(node._literal);
+      break;
+  }
+}
+
+function setContainerHeader (event, type="") {
+  let { level, sourcepos } = event.node;
+  if (!type)
+       type = node.type;
+
+  switch (type) {
+    case "heading":
+      if (!this.hContainer[0]
+      ||   this.hContainer[0] === level) {
+     ////
+           hContainer.splice(1, 2, sourcepos);
+           hContents = null;
+      }
+      else
+      if (!hContents)
+           hContents = level;
+
+      if (!curContainer.length) {
+     ///  <heading>
+           curContainer.push("heading");
+           break;
+      }
+
+    case "paragraph":
+      console.log("p", node.sourcepos);
+      break;
+
+    case "list":
+    case "item":
+      console.log(type, node.sourcepos);
+
+      curContainer.push(type);
+      break;
+
+    //   skip: image custom_inline custom_block
+    //   skip? block_quote emph strong image
+    //   ... text within is left unparsed
+    case "--skip":
+    case "block_quote":
+    case "emph":
+    case "strong":
+    case "image":
+    case "custom_inline":
+    case "custom_block":
+      curNodeType = null;
+      break;
+  }
+}
+
+function finalizeContainerData (type) {
+  switch (type) {
+    case "heading":
+      let content
+        = curContainer.slice(1).join(" ")
+                               .trim();
+
+      //  compare with sections index and cfg
+      //  ... 
+
+      if (curContainer.length)
+          curContainer.length=0;
+     ///  </heading>
+      break;
+
+    case "paragraph":
+      console.log("p", node.sourcepos);
+      break;
+
+    case "list":
+    case "item":
+      console.log(type, node.sourcepos);
+ 
+      //  finalize
+      if (type === "list"
+      &&  curContainer.at(-1) === "list"
+      &&  curContainer.pop()) {
+
+      }
+      else
+      if (type === "item"
+      &&  curContainer.at(-1) === "item"
+      &&  curContainer.pop()) {
+
+      }
+      break;
+
+    case "--skip":
+    case "block_quote":
+    case "emph":
+    case "strong":
+    case "image":
+    case "custom_inline":
+    case "custom_block":
+      curNodeType = "";
+      break;
+  }
+}
+
+function parseTextLiteral (str) {
+  if (this.curNodeType === null)
+  return;
+  
+  console.log(str);
+  str = str.trim(); // ... what's the difference
+
+  switch (curContainer.at(-1)) {
+    case "heading":
+      break;
+
+    case "list":
+    case "item":
+      break;
+
+    default:
+      break;
+  }
+
+     var match;
+  while (match = jstr.rx.opStack.exec()) {
+    let [op] = match;
+
+    switch (op) {
+
+    }
+  } jstr.rx.opStack.lastIndex=0;
+   //////////////////////////////
+
   //  get operator sign if encoded
   if (str[0] === "&")
 
@@ -245,71 +445,49 @@ function renderTextLiteral (str) {
   switch (match[0]) {
     case "": 
   }
+
+  this.out(node.literal); // --
 }
 
- ///////////////////////////////////////////////
+function render (ast) {
+  var walker = ast.walker(),
+      event,
+      type;
 
-var reader = new commonmark.Parser();
-    reader.inlineParser.match = function (re) {
-    var m = re.exec(this.subject.slice(this.pos));
-    if (m === null)
-        return null;
-    else
-        this.pos += m.index + m[0].length;
-        return m[0];
+  this.buffer = "";
+  this.lastOut = "\n";
 
-    console.log(re.source);
-},  commonmark.lib.rx.debugOffset=[0,0,0];
+  while (event = walker.next()) {
+      type = event.node.type;
 
-console.log(typeof reader.inlineParser.match);
-console.log(typeof commonmark.lib.rx.debugOffset,
-                   commonmark.lib.rx.debugOffset);
+      this.plugin(event);
 
-var writer = new commonmark.HtmlRenderer({ sourcepos: false });
-Object.assign(writer, yGestAirmoth);
-
-var parsed = reader.parse(configDoc);
-var result = writer.render(parsed);
-console.log(parsed);
-console.log(result);
-
- ///////////////////////////////////////////////
-// fs.writeFileSync('./.cache/snowplants.cfg.json', JSON.stringify(customer, null, 2));
-
-function plugin (event) {
-  let { node, entering }=event;
-  var pos = node.sourcepos;
-  var str = node._string_content;
-  var lit = node._literal;
-  var lvl = node.level;
-
-  if (prev.length
-  &&  node.type === "text")
-  var [
-  type, pos, str, lit, lvl, entering_ ]=prev;
-
-  switch (type) {
-    case "heading":
-   /////
-    if (!hContainer[0]
-    ||   hContainer[0] === lvl) {
-
-         hContainer.splice(1,2,),
-         hContents = null;
-
-    }
-    else
-    if (!hContents)
-         hContents = hLevel;
+      if (this[type])
+          this[type](event.node,
+                     event.entering);
   }
 
-  if (type)
-  console.log(type, lvl, str, lit, entering);
+  return this.buffer;
+}
 
-  if (pos)
-  console.log(String(pos[0||1][0||1]))
-
-  prev = node;
+function attrs (node) {
+    var att = [];
+    if (this.options.sourcepos) {
+        var pos = node.sourcepos;
+        if (pos) {
+            att.push([
+                "data-sourcepos",
+                String(pos[0][0]) +
+                    ":" +
+                    String(pos[0][1]) +
+                    "-" +
+                    String(pos[1][0]) +
+                    ":" +
+                    String(pos[1][1])
+            ]);
+        }
+    }
+    return att;
 }
 
 function getConfigDefaults__en () {
@@ -345,7 +523,7 @@ function getConfigDefaults__en () {
         expression: "expression",
       },
       sequenceTypes: {
-        oneOff: ["@", "one-off"],
+            oneOff: ["@", "one-off"],
         continuous: ["#", "continuous"],
       },
       modifiers: {
@@ -380,7 +558,71 @@ function getConfigDefaults__en () {
     __optional: ["default","expression"],
   };
 
-  return [moveSequences, sections, mappings];
+  let inverted = invertConfigObj(mappings);
+
+  return [moveSequences, sections, mappings,
+                                   inverted];
+
+//  # CommonMark extension syntax directives
+//    … status of implementation might differ
+//
+//    inline => :name[content]{key=val}
+//    leaf block => :: name [content] {key=val}
+//
+//    container block
+//    container block =>
+//    ::: name [inline-content] {key=val}
+//        ... contents ...
+//    :::
+//    { #id .class key1=value key2=value }
+//
+//    extension =>
+//    @setContent-Type[](code/ScalaResult.scala)
+//
+//    extension block =>
+//    @@@python[ Prog ]( SciPy ){ preview=yes }
+//    # More python code for scientist here
+//    @@@
+//
+//    Read more:
+//  - https://talk.commonmark.org/t/generic-directives-plugins-syntax/444
+//  - https://github.com/commonmark/commonmark-spec/wiki/Generic-Directive-Extension-List
+
+}
+
+function invertConfigObj (cfg) {
+  let result={};
+
+  for (let [cat,obj] of Object.entries(cfg)) {
+    if (key[0] === "_")
+    continue;
+
+    result[cat] = {};
+    invert(cat, obj);
+  }
+
+  function invert (cat, obj) {
+    for (let [key,alias] of Object.entries(obj)) {
+      if (cat === "sequenceTypes"
+      &&  cat === "modifiers"
+      &&  cat === "phases")  {
+      if (typeof alias === "string")
+          err.TYPE(false, cat, alias, obj);
+          continue;
+      }
+      else
+      if (!alias instanceof Array) {
+          err.TYPE(false, cat, key, alias);
+          continue;
+      }
+
+      if (typeof alias === "string")
+          result[cat][alias] = key;
+      else
+      if (typeof alias[0] === "string")
+          result[cat][alias[0]] = key;
+    }
+  }
 }
 
 ////////////////////////////////////////////////
@@ -445,38 +687,34 @@ function diff (text, mod) {
 
 ////////////////////////////////////////////////
 
-function validateConfig (cfg, ast=null) {
-  let [moveSequences, sections, mappings]
+function validateConfig (cfg) {
+  let [sections, mappings, moveSequences]
     = jstr.getConfigDefaults();
 
-  let err=[], sectionErr=[];
-  jsonion.err.makeExecutable(err);
-  jsonion.err.makeExecutable(sectionErr);
+  var err = jsonion.err;
+  var errCount = err.length;
+   jsonion.cur = "validateConfig"; 
 
-  if (!ast instanceof Object
-  &&  !cfg instanceof Object)
-  err.INPUT("ast, cfg");
+  if (typeof cfg !== "object") {
+      err.INPUT(false, "cfg");
 
-  else if (!ast instanceof Object)
-  err.INPUT("ast");
-
-  else if (!cfg instanceof Object)
-  err.INPUT("cfg");
+      console.log(err);
+      return false;
+  }
 
   let rx = jstr.rx.pick("heading",
                         "sameChr",
                         "symbols");
-
 
   /////////////////////////////////////////
  //   validate move sequence definitions
   var asd;
  /////
   if (!".moveSequences" in cfg)
-  err.PATH("cfg.moveSequences");
+  err.PATH(false, "cfg.moveSequences");
 
   else if (!cfg.moveSequences instanceof Array)
-  err.TYPE("cfg.moveSequences !Array");
+  err.TYPE(false, "cfg.moveSequences", "!Array");
 
   else {}
 
@@ -486,10 +724,10 @@ function validateConfig (cfg, ast=null) {
   var subsections={}, hContainer=[0], hContents;
  /////
   if (!"sections" in cfg)
-  err.PATH("cfg.sections");
+  err.PATH(false, "cfg.sections");
 
   else if (!cfg.sections instanceof Array)
-  err.TYPE("cfg.sections !Array");
+  err.TYPE(false, "cfg.sections", "!Array");
   
   else
   sections
@@ -511,10 +749,10 @@ function validateConfig (cfg, ast=null) {
         delete mappings.__optional;
  /////
   if (!"mappings" in cfg)
-  err.PATH("cfg.mappings");
+  err.PATH(false, "cfg.mappings");
 
   else if (!cfg.mappings instanceof Object)
-  err.TYPE("cfg.mappings", "!Object");
+  err.TYPE(false, "cfg.mappings", "!Object");
   
   else
   Object.entries(cfg.mappings)
@@ -522,14 +760,14 @@ function validateConfig (cfg, ast=null) {
     let compare = mappings[category];
 
     if (typeof compare === "undefined")
-    return err.MISCONFIG(`cfg.mapping.${category}`);
+        err.MISCONFIG(false, `cfg.mapping.${category}`);
 
     Object.entries(object)
           .forEach(([key,val]) => {
       let compareVal = compare[key];
 
       if (typeof compareVal === "undefined")
-      return err.MISCONFIG(`cfg.mappings.${category}.${key}`);
+          err.MISCONFIG(false, `cfg.mappings.${category}.${key}`);
 
       mappingEntry(key, val, compareVal,
                    category, object);
@@ -541,7 +779,7 @@ function validateConfig (cfg, ast=null) {
   Object.keys(obj).forEach(key =>
     (key[0] === "_" || optional.find(key))
      ? false
-     : err.PATH(`cfg.mappings.${c}.${key}`)
+     : err.PATH(false, `cfg.mappings.${c}.${key}`)
   ));
 
 
@@ -551,50 +789,37 @@ function validateConfig (cfg, ast=null) {
  /////
   if ("alias" in cfg) {
   if (!cfg.alias instanceof Object)
-  err.TYPE("cfg.alias", "!Object");
+      err.TYPE(false, "cfg.alias", "!Object");
   else {
 
   }}
 
- // --------------------------------------------
-
-  err = err.length                         &&
-        err.unshift("jstr.validateConfig") && {
-      [ err[0] ]: err,
-  };
-
-  return (!err) ? true : err;
-
+  return (err.length > errCount) ? false : cfg;
  ///////////////////////////////////////////////
 
   function sectionEntry (row, check=false, i=-1) {
     let [ heading, mapping, val ]=row;
     
     if (check) {
-        sectionErr.length=0;
+    var sectionErrCount = err.length;
    /////
     if (typeof heading !== "string")
-    sectionErr.TYPE(`cfg.sections[${i}][0]:`,
-                    "!String");
+        err.TYPE(false, `cfg.sections[${i}][0]:`, "!String");
     else
     if (!heading.test(rx.heading))
-    sectionErr.FORMAT(`cfg.sections[${i}][0]:`,
-             `"${heading}".match(${rx.heading.source})`, "<heading>");
+        err.FORMAT(false, `cfg.sections[${i}][0]:`, `"${heading}".match(${rx.heading.source})`, "<heading>");
 
     if (typeof mapping !== "string"
     ||  typeof val     !== "string"
     ||  !mapping.length || !val.length)
-    sectionErr.TYPE(`cfg.sections[${i}][1]:`,
-                    "!String", "<mapping>");
+        err.TYPE(false, `cfg.sections[${i}][1]:`, "!String", "<mapping>");
 
-    if (sectionErr.length)
-        return err.concat(sectionErr);
+    if (err.length > sectionErrCount)
+        return;
     }
 
-   // ------------------------------------------
-
     let hLevel=heading[1];
-   /////
+   ////////////////////////
     if (!hContainer[0]
     ||   hContainer[0] === hLevel)
          hContainer.splice(1,2,...row.slice(1));
@@ -606,11 +831,8 @@ function validateConfig (cfg, ast=null) {
          hContents = hLevel;
     else
     if (hContents !== hLevel)
-    err.SCOPE(`cfg.sections[${i}]:`,
-              `h${heading}`, "<heading>");
+        err.SCOPE(false, `cfg.sections[${i}]:`, `h${heading}`, "<heading>");
     }}
-
-   // ------------------------------------------
 
     let section
       = hContainer[1];
@@ -618,13 +840,12 @@ function validateConfig (cfg, ast=null) {
     if (!check)
     return subsections[section].push(row);
 
-   // ------------------------------------------
     var j;
-
+   //////////////////////////////
     if (hContainer[0] === hLevel
-    && !subsections[section])
-    err.SCOPE(`cfg.sections[${i}]:`, section);
-    
+    && !subsections[section]) {
+        err.SCOPE(false, `cfg.sections[${i}]:`, section);
+    }
     else
     if (hContainer[0] !== hLevel
     &&  0 > (j=subsections[section]
@@ -633,9 +854,7 @@ function validateConfig (cfg, ast=null) {
                           self.splice(i,1);
                           return true;
              }})
-    ))
-    err.SCOPE(`cfg.sections[${section}][${i}]:`,
-                                     mapping);
+    )) err.SCOPE(false, `cfg.sections[${section}][${i}]:`, mapping);
   }
 
   function missingSection (row) {
@@ -651,24 +870,23 @@ function validateConfig (cfg, ast=null) {
     let section
       = hContainer[1];
 
-    err.PATH("cfg.sections[]:", section,
-                                mapping);
+    err.PATH(false, "cfg.sections[]:", section, mapping);
   }
 
   function mappingEntry (key, val, compare,
                          category, catObj) {
     if (!val instanceof Array)
-    return err.TYPE(`cfg.mappings.${category}.${key}`, "!Array");
+        err.TYPE(false, `cfg.mappings.${category}.${key}`, "!Array");
 
     if (typeof val[0] !== "string")
-    err.TYPE(`cfg.mappings.${category}.${key}[0]`, "!String");
+        err.TYPE(false, `cfg.mappings.${category}.${key}[0]`, "!String");
 
     switch (category) {
       case ("sequenceTypes"):
       case ("modifiers"):
       case ("phases"):
         if (typeof val[1] !== "string")
-        err.TYPE(`cfg.mappings.${category}.${key}[1]`, "!String");
+            err.TYPE(false, `cfg.mappings.${category}.${key}[1]`, "!String");
 
         var bfr;
        /////
@@ -677,16 +895,16 @@ function validateConfig (cfg, ast=null) {
         ||  key === "mid"
         ||  key === "end")) {
         if (key === "start" && val.length !== 1)
-            err.SCOPE(`cfg.mappings.${category}.${key}[0]`, `"${val}".length!==1`);
+            err.SCOPE(false, `cfg.mappings.${category}.${key}[0]`, `"${val}".length!==1`);
 
         if (key === "mid"   && val.length !== 2)
-            err.SCOPE(`cfg.mappings.${category}.${key}[0]`, `"${val}".length!==2`);
+            err.SCOPE(false, `cfg.mappings.${category}.${key}[0]`, `"${val}".length!==2`);
 
         if (key === "end"   && val.length !== 3)
-            err.SCOPE(`cfg.mappings.${category}.${key}[0]`, `"${val}".length!==3`);
+            err.SCOPE(false, `cfg.mappings.${category}.${key}[0]`, `"${val}".length!==3`);
 
         if (!val.match(rx.sameChr))
-             err.SCOPE(`cfg.mappings.${category}.${key}[0]`, `!"${val}".match(${rx.sameChr.source}`);
+            err.SCOPE(false, `cfg.mappings.${category}.${key}[0]`, `!"${val}".match(${rx.sameChr.source}`);
 
         if (key !== "start")
             bfr = catObj["start"]    &&
@@ -694,30 +912,30 @@ function validateConfig (cfg, ast=null) {
                   catObj["start"][0][0];
         if (bfr
         &&  bfr !== val[0][0])
-            err.SCOPE(`cfg.mappings.${category}.${key}[0]`, `"${val[0]}"!=="${bfr}"`);
+            err.SCOPE(false, `cfg.mappings.${category}.${key}[0]`, `"${val[0]}"!=="${bfr}"`);
         }
         else
         if (val[0].match(rx.symbols))
-            err.SCOPE(`cfg.mappings.${category}.${key}[0]`, `!"${val}".match(${rx.symbols.source}`);
+            err.SCOPE(false, `cfg.mappings.${category}.${key}[0]`, `!"${val}".match(${rx.symbols.source}`);
 
       default:
         if (typeof val[0] !== "string")
-        err.TYPE(`cfg.mappings.${category}.${key}[0]`, "!String");
+              err.TYPE(false, `cfg.mappings.${category}.${key}[0]`, "!String");
     }
 
     let index=val.slice(-2);
    /////
     if (typeof index[0] !== "number")
-        err.TYPE(`cfg.mappings.${category}.${key}[-2]`, "!Number", "<offset_index>");
+        err.TYPE(false, `cfg.mappings.${category}.${key}[-2]`, "!Number", "<offset_index>");
     else
     if (index[0] < 0)
-        err.SCOPE(`cfg.mappings.${category}.${key}[-2]`, `${index[0]}<0`, "<offset_index>");
+        err.SCOPE(false, `cfg.mappings.${category}.${key}[-2]`, `${index[0]}<0`, "<offset_index>");
 
     if (typeof index[1] !== "number")
-        err.TYPE(`cfg.mappings.${category}.${key}[-1]`, "!Number", "<offset_index>");
+        err.TYPE(false, `cfg.mappings.${category}.${key}[-1]`, "!Number", "<offset_index>");
     else
     if (index[1] < 0)
-        err.SCOPE(`cfg.mappings.${category}.${key}[-1]`, `${index[0]}<0`, "<offset_index>");
+        err.SCOPE(false, `cfg.mappings.${category}.${key}[-1]`, `${index[0]}<0`, "<offset_index>");
  
     return;
   }
@@ -725,52 +943,12 @@ function validateConfig (cfg, ast=null) {
   function mapAliasEntry() {}
 }
 
-////////////////////////////////////////////////
+ ///////////////////////////////////////////////
+// to-do: syntax improvement (recurring chars)
+function rxFromArray (rxStack,
+                      errorMap = jsonion.err) {
+  errorMap.cur = "rxFromArray";
 
-function render (ast) {
-  var walker = ast.walker(),
-      event,
-      type;
-
-  this.buffer = "";
-  this.lastOut = "\n";
-
-  while (event = walker.next()) {
-      type = event.node.type;
-
-      this.plugin(event);
-
-      if (this[type])
-          this[type](event.node,
-                     event.entering);
-  }
-
-  return this.buffer;
-}
-
-function attrs (node) {
-    var att = [];
-    if (this.options.sourcepos) {
-        var pos = node.sourcepos;
-        if (pos) {
-            att.push([
-                "data-sourcepos",
-                String(pos[0][0]) +
-                    ":" +
-                    String(pos[0][1]) +
-                    "-" +
-                    String(pos[1][0]) +
-                    ":" +
-                    String(pos[1][1])
-            ]);
-        }
-    }
-    return att;
-}
-
-////////////////////////////////////////////////
-
-function rxFromArray (rxStack, errorMap=null) {
   if (rxStack instanceof RegExp)
   return rxStack;
 
@@ -820,7 +998,7 @@ function rxFromArray (rxStack, errorMap=null) {
           prev.push(str);
       }   continue   }
 
-      reportError("TYPE", expr);
+      new errorMap.TYPE(expr);
       break;
 
     case ("function"):
@@ -851,15 +1029,15 @@ function rxFromArray (rxStack, errorMap=null) {
                typeof str === "string"))
            prev = bfr;
        else
-           reportError("TYPE", "Function output invalid", expr, bfr);
+           errorMap.OUTPUT(false, expr, bfr);
        }
 
        if (typeof rxStack[i+1] === "function")
            expr = rxStack[(i=i+1)];
        else break;
        ///////
-      } while (-0b01) }
-        catch (error) { reportError("MISCONFIG", error) }
+      } while (0b1) }
+        catch (err) { errorMap.MISCONFIG(err) }
 
       if (typeof prev === "string")
           res.splice(i-len, len, prev),
@@ -882,8 +1060,6 @@ function rxFromArray (rxStack, errorMap=null) {
       bfr = (!prev)
           ?  postProcessFn(res)
           :  postProcessFn(...res);
-
-        throw bfr;
 
    if (typeof bfr === "string")
        return factoryRegExp(bfr);
@@ -932,136 +1108,16 @@ function rxFromArray (rxStack, errorMap=null) {
     try {
       return new RegExp(`(?:${str.join("|")})`,"g");
     } catch (e) {
-      reportError("FORMAT", str, e);
+      new errorMap.FORMAT(str);
     }
   }
-
-  function reportError (ERR_TYPE, ...msg) {
-    if (errorMap
-    &&  typeof errorMap[ERR_TYPE] == "function")
-        return errorMap[ERR_TYPE](...msg);
-
-    if (jsonion
-    &&  jsonion.err
-    &&  jsonion.err[ERR_TYPE]
-    &&  jsonion.err.log)
-        jsonion.err.log(
-        jsonion.err[ERR_TYPE]+":", ...msg);
-    else
-        console.error(...msg);
-  }
-}
-
-////////////////////////////////////////////////
-
-function executableErrorMap (errorMap) {
-  if (!errorMap instanceof Array)
-  return;
-
-  var self, depth=1;
-  if (errorMap === this) {
-      errorMap = new Array();
-      var self = this;
-  }
-
-  Object.entries(this).forEach(([key,str]) => {
-  if (typeof str === "string") {
-      errorMap[key]=function (...msg) {
-      depth=1;
-
-      for (var j,i=0; i<msg.length; i++) {
-        if (j
-        || (typeof msg[i] !== "string"
-        && (j = 1))) {
-            msg[i] = [evalArg(msg[i])];
-        if (msg[i].length === 1
-        &&  msg[i][0] instanceof Array)
-            msg[i]
-          = msg[i][0];
-      }}
-
-      errorMap.push([key,
-     (!msg.length) ? str : `${str}:`, ...msg]);
-
-          if (jsonion.err.log)
-      return (jsonion.err.log(errorMap.at(-1)));
-  }}
-  else
-  if (self)
-      errorMap[key]=str || (!"function");
-  });
-
-  if (self)
-  jsonion.err = errorMap;
-
- ///////////
-
-  function evalArg (obj) {
-    if (obj === null)
-        return null;
-    if (jsonion.err.reportArgVAlue
-    && (typeof obj === "string"
-    ||  typeof obj === "number"
-    ||  typeof obj === "boolean"))
-        return obj;
-
-    var res;
-    if (typeof obj !== "object") {
-    if (obj.length
-    ||  obj.length === 0)
-        res = [typeof obj, obj.length];
-    else
-        res = typeof obj;
-    }
-    else
-    if (typeof obj === "object") {
-        res = [obj.constructor.name, obj.length];
-    if (!!obj[Symbol.iterator]
-    && `${obj[Symbol.iterator]}`.substring(9,15)
-                                   === "values") {  
-    if (depth <= jsonion.err.reportArgDepth)
-    for (let val of obj) {
-         res.push(evalArg(val));
-    }}
-    else
-    if (Object.entries(obj).length)
-    for (let [key,val] of Object.entries(obj)) {
-         if (depth < jsonion.err.reportArgDepth)
-         res.push([key].concat(evalArg(val)));
-
-         else
-         res.push(key);
-    }}
-    return res;
-  }
-}
-
-function consoleLog (...params) {
-  if (typeof jsonion      === "undefined"
-  || (typeof jsonion.mode === "undefined"
-  ||         jsonion.mode !== "production")
-  && (!jsonion.err
-  ||  !jsonion.err.suppress))
-  console.log(...params);
-
-  return params;
-}
-
-function consoleError (...params) {
-  if (typeof jsonion      === "undefined"
-  || (typeof jsonion.mode === "undefined"
-  ||         jsonion.mode !== "production")
-  && (!jsonion.err
-  ||  !jsonion.err.suppress))
-  console.error(...params);
-
-  return params;
 }
 
 function encodeRxSpecialChars (arrayOfStrings) {
   if (!arrayOfStrings instanceof Array)
   return;
-
+  
+  console.log(arrayOfStrings);
   let rxSet = /(?:\[|\]|\.)/g; // ...
   let replacer
     = Object.fromEntries(
@@ -1101,4 +1157,59 @@ function encodeRxSpecialChars (arrayOfStrings) {
   return arrayOfStrings;
 }
 
-console.log(jstr.rx.opStack)
+function transformOpStack() {
+Object.defineProperty(jstr.rx, "opStack", {
+  get: (() => {
+    var opStack = jstr.rx.opStack;
+
+    if (opStack instanceof Array)
+        opStack = jsonion.rxFromArray(opStack);
+
+    return function(){
+      if (jstr.rx.__opStack instanceof RegExp)
+      return jstr.rx.__opStack;
+
+      if (opStack instanceof RegExp)
+      return opStack;
+    };
+  })(),
+  set: function (rxStack) {
+    rxStack = jsonion.rxFromArray(rxStack);
+
+    if (rxStack instanceof RegExp)
+    jstr.rx.__opStack = rxStack;
+
+    return rxStack;
+  },
+});
+}
+
+ ///////////////////////////////////////////////
+// function executableErrorMap (errorTypes) {}
+
+function consoleLog (...params) {
+  if (typeof jsonion      === "undefined"
+  || (typeof jsonion.mode === "undefined"
+  ||         jsonion.mode !== "production")
+  && (!jsonion.err
+  ||  !jsonion.err.suppress))
+  console.log(...params);
+
+  return params;
+}
+
+function consoleError (...params) {
+  var throws;
+  if (params[0] === false)
+      throws = !params.shift();
+
+  if (typeof jsonion      === "undefined"
+  || (typeof jsonion.mode === "undefined"
+  ||         jsonion.mode !== "production")
+  && (!jsonion.err
+  ||  !jsonion.err.suppress))
+  console.trace(...params);
+
+  if (throws) throw ".";
+  return params;
+}
