@@ -48,7 +48,8 @@ const jstr = new Object({
     symbols: /[^\w\s[[:cntrl:]]]/g,
     sameChr: /^(?<c>.)\k<c>+$/,
     heading: /h([1-6])/g,
-    opStack: ["<=","=>", "*","^",":",".","&","-",">","@","#", "[","]","=","<","!","\"","\'","\`"],
+    opStack: ["\\s", "<=","=>", "*","^",":",".","&","-",">","@","#", "[","]","=","<","!","\"","\'","\`"],
+      space: / +/g,
     pick: function (...keys) {
       let res={};
       return keys.every(key => this[key]
@@ -200,6 +201,16 @@ class jstrParseMd {
 
       getConfigDefaults = getConfigDefaults__en;
          validateConfig = validateConfig;
+
+
+  constructor() {
+    Object.entries(jstr.rx).forEach(([key,rx]) => {
+       if (typeof expr !== "function")
+           this["re"
+               + key[0].toUpperCase()
+               + key.substring(1)] = expr;
+    });
+  }
 }
 
 var cfg = require
@@ -224,7 +235,7 @@ else
 var writer
   = Object.assign(commonmark.HtmlRenderer(
                       { sourcepos: false }),
-                      {   yGestAirmoth   });
+                      {  ...yGestAirmoth });
 
 var reader = new commonmark.Parser();
     reader.inlineParser.match = function (re) {
@@ -401,6 +412,9 @@ function finalizeContainerData (type) {
 function parseTextLiteral (str) {
   if (this.curNodeType === null)
   return;
+
+  let [key, alias] = this.cfg.slice(3);
+  let {opStack, space} = this;
   
   console.log(str);
   str = str.trim(); // ... what's the difference
@@ -418,11 +432,121 @@ function parseTextLiteral (str) {
   }
 
      var match;
-  while (match = jstr.rx.opStack.exec()) {
+  while (match = this.reOpStack.exec(str)) {
     let [op] = match;
+    let term = str.substring(match.index,
+                  this.reSpace.lastIndex);
 
-    switch (op) {
+     ///////////////////////////////////////////
+    //  word term (preceeding opcodes symbols)
+    if (alias[term])
+    for (let aliasTerm of alias[term]) {
+    switch (aliasTerm[0]) {
+      case ("directional"):
+        break;
 
+      case ("default"):
+        break;
+
+      case ("expression"):
+        break;
+
+      //    hype (modifier)
+      case ("velocity"):
+        break;
+
+      case ("spring"):
+        break;
+
+      case ("freeze"):
+        break;
+
+      //    turns
+      case ("frontside"):
+        break;
+
+      case ("backside"):
+        break;
+
+      //    sides
+      case ("front"):
+        break;
+
+      case ("back"):
+        break;
+
+      case ("left"):
+        break;
+
+      case ("right"):
+        break;
+
+    }   this.reOpStack.lastIndex
+      = this.reSpace.lastIndex;
+       //////////////////////////
+        this.reSpace.lastIndex=0   }
+
+     //////////////////////////
+    //  matched opcode symbol
+    switch (alias[op]) {
+      //    keyboard profile
+      case (key.A):
+        break;
+
+      case (key.B):
+        break;
+
+      case (key.select):
+        break;
+
+      case (key.return):
+        break;
+
+      //    syntax
+      case (key.default):
+        break;
+
+      case (key.expression):
+        break;
+
+      //    sequence types
+      case (key.oneOff):
+        break;
+
+      case (key.continuous):
+        break;
+
+      //    modifiers
+      case (key.variation):
+        break;
+
+      case (key.modifer):
+        break;
+
+      case (key.insert):
+        break;
+
+      case (key.transition):
+        break;
+
+      case (key.reposition):
+        break;
+
+      //    phases
+      case (key.trigger):
+        break;
+
+      case (key.start):
+        break;
+
+      case (key.mid):
+        break;
+
+      case (key.mid):
+        break;
+
+      case (key.repetition):
+        break;
     }
   } jstr.rx.opStack.lastIndex=0;
    //////////////////////////////
@@ -559,9 +683,11 @@ function getConfigDefaults__en () {
   };
 
   let inverted = invertConfigObj(mappings);
+  let flattened = flattenConfigObj(mappings);
 
   return [moveSequences, sections, mappings,
-                                   inverted];
+                                   inverted,
+                                  flattened];
 
 //  # CommonMark extension syntax directives
 //    … status of implementation might differ
@@ -590,37 +716,64 @@ function getConfigDefaults__en () {
 
 }
 
-function invertConfigObj (cfg) {
-  let result={};
+function preparseConfigObj (cfg) {
+  let inverted={}, flattened={};
 
-  for (let [cat,obj] of Object.entries(cfg)) {
+  for (var [cat,obj] of Object.entries(cfg)) {
     if (key[0] === "_")
     continue;
 
-    result[cat] = {};
-    invert(cat, obj);
-  }
-
-  function invert (cat, obj) {
-    for (let [key,alias] of Object.entries(obj)) {
+    for (var [key,alias] of Object.entries(obj)) {
       if (cat === "sequenceTypes"
       &&  cat === "modifiers"
       &&  cat === "phases")  {
-      if (typeof alias === "string")
-          err.TYPE(false, cat, alias, obj);
+      if (typeof alias === "string") {
+          err.TYPE(false, cat, key, alias);
           continue;
-      }
+      }}
       else
       if (!alias instanceof Array) {
           err.TYPE(false, cat, key, alias);
           continue;
       }
 
-      if (typeof alias === "string")
-          result[cat][alias] = key;
-      else
-      if (typeof alias[0] === "string")
-          result[cat][alias[0]] = key;
+      flatten(cat, obj);
+      invert(cat, obj);
+    }
+  }
+
+  return [inverted, flattened];
+ ///////////////////////////////
+
+  function flatten () {
+    if (typeof alias === "string") {
+    if (flattened[key])
+        flattened[key].push([ cat, alias ]);
+    else
+        flattened[key] = [[ cat, alias ]];
+    }
+    else
+    if (typeof alias[0] === "string") {
+    if (flattened[key])
+        flattened[key].push([ cat, alias[0] ]);
+    else
+        flattened[key] = [[ cat, alias[0] ]];
+    }
+  }
+
+  function invert () {
+    if (typeof alias === "string") {
+    if (inverted[alias])
+        inverted[alias].push([ alias, cat ]);
+    else
+        inverted[alias] = [[ key, cat ]];
+    }
+    else
+    if (typeof alias[0] === "string") {
+    if (inverted[alias[0]])
+        inverted[alias[0]].push([ key, cat ]);
+    else
+        inverted[alias[0]] = [[ key, cat ]];
     }
   }
 }
