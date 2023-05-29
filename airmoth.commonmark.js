@@ -5,6 +5,10 @@ const commonmark
     = require && require("./commonmark@0.30.0")
               || window.commonmark;
 
+
+
+console.log(commonmark);
+
 const jsonion = new Object({
 ///  ---------
  rxDelimiter:"|",
@@ -186,11 +190,11 @@ var configDoc = `
 class jstrParseMd {
  ///////////////////////////////////////////////
 
-    subsections={ };         curPos=[];
-     hContainer=[0];         curContainer=[];
-     hContents;              curNodeType="";
-
-    containerData=[];
+                          sections=[];
+     literal=[];        curSection=[0,"",[],[],
+                                    0,"",[],[]];
+      curPos=[0,0];     containers=[];
+                        outOfScope=true;
 
  ///////////////////////////////////////////////
 
@@ -199,17 +203,16 @@ class jstrParseMd {
   finalizeContainerData = finalizeContainerData;
        parseTextLiteral = parseTextLiteral;
 
-      getConfigDefaults = getConfigDefaults__en;
-         validateConfig = validateConfig;
-
+  static    validateConfig = validateConfig;
+  static getConfigDefaults = getConfigDefaults__en;
 
   constructor() {
-    Object.entries(jstr.rx).forEach(([key,rx]) => {
-       if (typeof expr !== "function")
+  Object.entries(jstr.rx).forEach(([key,rx]) => {
+    if (typeof expr !== "function")
            this["re"
                + key[0].toUpperCase()
-               + key.substring(1)] = expr;
-    });
+               + key.substring(1)] = rx;
+  });
   }
 }
 
@@ -218,7 +221,7 @@ var cfg = require
  && readFileSync("./snowplants.cfg.json");
 
 let yGestAirmoth
-  = { render, plugin: jstrParseMd };
+  = { render, plugin: new jstrParseMd };
 
 if (!cfg)
     yGestAirmoth.cfg
@@ -235,7 +238,7 @@ else
 var writer
   = Object.assign(commonmark.HtmlRenderer(
                       { sourcepos: false }),
-                      {  ...yGestAirmoth });
+                      {   yGestAirmoth   });
 
 var reader = new commonmark.Parser();
     reader.inlineParser.match = function (re) {
@@ -261,156 +264,187 @@ var result = writer.render(parsed);
 
 function renderMdPlugin (event) {
   let { node, entering }=event;
+  let  type = node.type;
+  let containers = this.containers;
 
-  if (entering)
-  console.log(node.type, node.sourcepos);
+
+  console.log((entering && "/" || "")+node.type, node.sourcepos);
   
-  else
-  console.log("/"+node.type);
+  //  container
+  if (entering) {
+  if (type === "heading")
+      containers.splice(-1,0, node.type,
+                              node.level);
+      else
+      containers.push(node.type);
+  }
 
+  //   skip: image custom_inline custom_block
+  //   ... text within is left unparsed
+  if (type === "image"
+  ||  type === "block_quote"
+  ||  type === "custom_inline"
+  ||  type === "custom_block") {
+  if (entering)
+      this.outOfScope ++;
+
+      else
+      this.outOfScope --;
+
+      return;
+  }
+
+  //  … skip headings and lists beyond 2nd level
+  if (this.outOfScope)
+  switch (entering) {
+    case (true):
+      if (type === "heading"
+      ||  type === "list")
+          this.outOfScope ++;
+
+      return;
+
+    case (false):
+      if (node.type === "heading")
+          containers.splice(-2,2);
+      else
+          containers.pop();
+
+      if (type === "heading"
+      ||  type === "list")
+          this.outOfScope --;
+
+      return;
+  }
+
+  if (this.outOfScope)
+  return;
+  
   switch (node.type) {
     case "heading":
     case "paragraph":
     case "list":
     case "item":
+    case "strong":
+    case "emph":
       if (entering)
       this.setContainerHeader(event);
 
       else
       this.finalizeContainerData(node.type);
-      break;
 
-    case "strong":
-      this.containerData.push("*");
-      break;
-
-    case "emph":
-      this.containerData.push("**");
-      break;
-
-    case "block_quote":
-    case "image":
-    case "custom_inline":
-    case "custom_block":
-      if (entering)
-      this.setContainerHeader(event, "--skip");
-
-      else
-      this.finalizeContainerData("--skip");
-      break;
-
-    case ("link"):
-      if (entering)
-      this.esc(node.destination),
-      this.esc(node.title);
       break;
 
     case ("text"):
       this.renderTextLiteral(node._literal);
+      break;
+
+    case ("link"):
+      if (entering)
+      this.setContainerHeader(event),
+      this.esc(node.destination),
+      this.esc(node.title);
+
+      else
+      this.finalizeContainerData(node.type);
+      
+      break;
+  }
+}
+
+function finalizeContainerData (type) {
+  let containers = this.containers;
+
+  switch (type) {
+    case "heading":
+      let level = containers.at(-1);
+
+      //  compare with sections index and cfg
+      //  ...
+
+      // </heading>
+      break;
+
+    case "list":
+    case "item":
+      break;
+
+    case "strong":
+    case "emph":
+      if (typeof this.literal.at(-1)
+                        === "object") {
+      let row
+        = this.literal.at(-1);
+
+          this.literal
+         [this.literal.length-1]
+          = row[0]
+          + row.slice(1,-1).join(" ")
+          + row.at(-1);
+      }
       break;
   }
 }
 
 function setContainerHeader (event, type="") {
   let { level, sourcepos } = event.node;
+  let { curSection, containers } = this;
+
   if (!type)
        type = node.type;
 
   switch (type) {
     case "heading":
-      if (!this.hContainer[0]
-      ||   this.hContainer[0] === level) {
-     ////
-           hContainer.splice(1, 2, sourcepos);
-           hContents = null;
-      }
-      else
-      if (!hContents)
-           hContents = level;
+      let [h1_level, h1_key] = curSection;
+      let [h2_level, h2_key] = curSection
+                                 .slice(4,6);
+      if (!h1_level
+      ||   h1_level === level)
+           curSection.splice(0,2,level,""),
+           curSection[2] = sourcepos[0]; 
 
-      if (!curContainer.length) {
-     ///  <heading>
-           curContainer.push("heading");
-           break;
-      }
+      else
+      if (!h2_level
+      ||   h2_level === level)
+           curSection.splice(3,2,level,""),
+           curSection[6] = sourcepos[0];
+
+      else
+      this.outOfScope ++;
+
+      break;
 
     case "paragraph":
-      console.log("p", node.sourcepos);
-      break;
-
     case "list":
     case "item":
-      console.log(type, node.sourcepos);
+      if (type === "list"
+      &&  containers.indexOf(type) !== -1)
+          this.outOfScope ++;
 
-      curContainer.push(type);
       break;
 
-    //   skip: image custom_inline custom_block
-    //   skip? block_quote emph strong image
-    //   ... text within is left unparsed
-    case "--skip":
-    case "block_quote":
-    case "emph":
     case "strong":
-    case "image":
-    case "custom_inline":
-    case "custom_block":
-      curNodeType = null;
+    case "emph":
+      if (type === "strong")
+      this.literal.push(["*"]);
+
+      else
+      this.literal.push(["**"]);
+
       break;
   }
-}
 
-function finalizeContainerData (type) {
-  switch (type) {
-    case "heading":
-      let content
-        = curContainer.slice(1).join(" ")
-                               .trim();
+  if (sourcepos) {
+  if (curSection[0])
+      curSection[3] = sourcepos[1];
 
-      //  compare with sections index and cfg
-      //  ... 
-
-      if (curContainer.length)
-          curContainer.length=0;
-     ///  </heading>
-      break;
-
-    case "paragraph":
-      console.log("p", node.sourcepos);
-      break;
-
-    case "list":
-    case "item":
-      console.log(type, node.sourcepos);
- 
-      //  finalize
-      if (type === "list"
-      &&  curContainer.at(-1) === "list"
-      &&  curContainer.pop()) {
-
-      }
-      else
-      if (type === "item"
-      &&  curContainer.at(-1) === "item"
-      &&  curContainer.pop()) {
-
-      }
-      break;
-
-    case "--skip":
-    case "block_quote":
-    case "emph":
-    case "strong":
-    case "image":
-    case "custom_inline":
-    case "custom_block":
-      curNodeType = "";
-      break;
+  if (curSection[4])
+      curSection[7] = sourcepos[1];
   }
 }
 
 function parseTextLiteral (str) {
-  if (this.curNodeType === null)
+  if (this.curContainer.at(-1) === null)
   return;
 
   let [key, alias] = this.cfg.slice(3);
@@ -439,10 +473,13 @@ function parseTextLiteral (str) {
 
      ///////////////////////////////////////////
     //  word term (preceeding opcodes symbols)
-    if (alias[term])
+    if (alias[term]) {
+        alias[term]
+
     for (let aliasTerm of alias[term]) {
     switch (aliasTerm[0]) {
       case ("directional"):
+        if (this.hContainer === "")
         break;
 
       case ("default"):
@@ -550,27 +587,7 @@ function parseTextLiteral (str) {
     }
   } jstr.rx.opStack.lastIndex=0;
    //////////////////////////////
-
-  //  get operator sign if encoded
-  if (str[0] === "&")
-
-  var pre, op, bfr;
- /////
-  if (prev) {
-  if ((bfr = prev.lastIndexOf(" ")) >= 0)
-       pre = prev.substring(bfr);
-  }
-
-  if ((bfr = str.indexOf(" ")) >= 0)
-        op = str.substring(0, bfr);
-
-  var match = jstr.rx.opStack.match(op);
-  if (match)
-  switch (match[0]) {
-    case "": 
-  }
-
-  this.out(node.literal); // --
+  // this.out(node.literal);
 }
 
 function render (ast) {
@@ -618,7 +635,7 @@ function getConfigDefaults__en () {
   let moveSequences = [];
 
   let sections = [
-  ["h1", "keyboardProfile", "Keyboard profile"],
+  ["h1", "Z", "Keyboard profile"],
   ["h1", "sequences", "Move sequences"],
   ["h1", "syntax", "Syntax"],
   ["h2", "addSequence", "[Add new sequence](javascript:newSequence)"],
@@ -682,8 +699,8 @@ function getConfigDefaults__en () {
     __optional: ["default","expression"],
   };
 
-  let inverted = invertConfigObj(mappings);
-  let flattened = flattenConfigObj(mappings);
+  let [ inverted, flattened ]
+        = preparseConfigObj(mappings);
 
   return [moveSequences, sections, mappings,
                                    inverted,
@@ -720,7 +737,7 @@ function preparseConfigObj (cfg) {
   let inverted={}, flattened={};
 
   for (var [cat,obj] of Object.entries(cfg)) {
-    if (key[0] === "_")
+    if (cat[0] === "_")
     continue;
 
     for (var [key,alias] of Object.entries(obj)) {
@@ -737,7 +754,7 @@ function preparseConfigObj (cfg) {
           continue;
       }
 
-      flatten(cat, obj);
+      // flatten(cat, obj);
       invert(cat, obj);
     }
   }
