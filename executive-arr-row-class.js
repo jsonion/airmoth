@@ -85,6 +85,7 @@ return Object.assign(jsonion, {
         PATH: "Path not found",
        INPUT: "Invalid input parameter",
        SCOPE: "Value out of scope",
+      FORMAT: "Value format invalid",
       OUTPUT: "Function output invalid",
    MISCONFIG: "Misconfiguration",
     suppress: false,
@@ -388,9 +389,9 @@ class SublimeText extends InputActivity {}
     ////////////////
 class ArrayWrapper {
   constructor (array, returnExecFn=null,
-                      classOverride=true,
-                      attachIndexes=true,
-                       inheritProps=[]) {
+                     classOverride=true,
+                     attachIndexes=true,
+                      inheritProps=[]) {
     if (array instanceof ArrayWrapper) {
     //  check for equal configuration in case
     if (array.returnExecFn  === returnExecFn
@@ -408,11 +409,11 @@ class ArrayWrapper {
          array = array.instance;
     }
 
-    this.classOverride = !!classOverride; // ext
+    this.classOverride = classOverride;
    //////
     this.instance = (array instanceof Array
                                    && array)
-    ||  (array = new Array());
+     ||             (array = new Array());
 
    /////
     if (inheritProps instanceof Array)
@@ -460,20 +461,26 @@ class ArrayWrapper {
   static bind (object, wrapper, inheritProps,
                                 classOverride,
                                 attachIndexes) {
-
-    console.trace(typeof object, object, eval(object.constructor.name));
     if (!object
     ||  !wrapper
     ||  typeof object  !== "object"
     || (typeof wrapper !== "object"
-    &&  typeof wrapper !== "function"))
-    jsonion.cur = [ArrayWrapper, "bind"],
-    jsonion
-   .err.TYPE(["array",  [object ]],
+    &&  typeof wrapper !== "function")) {
+    if (!jsonion.err.TYPE.length)
+        jsonion.cur = [ArrayWrapper, "bind"],
+        jsonion.err
+       .TYPE(["array",  [object]],
              ["wrapper",[wrapper]],
              ["inheritProps", [inheritProps]],
              ["classOverride",[classOverride]],
              ["attachIndexes",[attachIndexes]]);
+    else
+        jsonion.err.log
+       (jsonion.err.TYPE +
+        `: Class not found: `, classObj);
+    
+        return;
+    }
 
     if (!wrapper.instance === object)
           wrapper.instance = object;
@@ -482,68 +489,63 @@ class ArrayWrapper {
                 && inheritProps.filter(prop =>
                    typeof prop === "string");
 
-    var wrapperProps, keys, missingProps=[],
-                             ignoreProps=["length", "push", "unshift", "concat", "splice", "shift", "pop", "copyWithin"];
+    var wrapperProps=[], keys, missingProps=[],
+                                ignoreProps=["length", "push", "unshift", "concat", "splice", "shift", "pop", "copyWithin"];
 
-  { ////////////////////////////////////////////
+  { /// resolve property lists to apply ////////
 
-    let objectCls
-      = eval(object.constructor.name);
+    try {
+    let wrapperCls = ArrayWrapper
+       .getClassExtensions(wrapper);
 
-    let wrapperCls
-      = eval(wrapper.constructor.name);
+    let objectCls = ArrayWrapper
+       .getClassExtensions(object);
 
-     ///
-        wrapperProps
-      = Object.getOwnPropertyNames(wrapperCls
-                                  .prototype);
-    var prototype
-      = objectCls.prototype;
-
-    if (!inheritProps.length) {
-        keys
-      = Object.getOwnPropertyNames(object);
-
+    if (!inheritProps.length
+    &&  (inheritProps = [])) {
+    //  get props for all class extensions
+    if (objectCls.propertyNames)
         inheritProps
-      = Object.getOwnPropertyNames(prototype);
+      = objectCls.propertyNames;
+    else {
+    for (let cls of objectCls) {
+        keys = Object.getOwnPropertyNames(cls);
+        inheritProps.concat(keys);
 
-    //  bind all available properties
-    if (objectCls !== Array)
-    do {
-    let clsProto = Array.prototype;
-    let clsProps
-      = Object.getOwnPropertyNames(arrProto);
-
-        inheritProps
-       .concat(arrProto)
+        keys = Object.getOwnPropertyNames(cls
+                                   .prototype);
+        inheritProps.concat(keys);
+      //////////////////////////////
+    }   objectCls.propertyNames = inheritProps
        .filter((val, index, self) =>
-                self.indexOf(val) === index);
+                self.indexOf(val) === index)  }}
 
-  }}}  /////////////////////////////////////////
+  //////
 
+    if (classOverride) {
+    //  get props for all class extensions
+    if (wrapperCls.propertyNames)
+        wrapperProps
+      = wrapperCls.propertyNames;
+    else {
+    for (let cls of wrapperCls) {
+        keys = Object.getOwnPropertyNames(cls);
+        wrapperProps.concat(keys);
+
+        keys = Object.getOwnPropertyNames(cls
+                                   .prototype);
+        wrapperProps.concat(keys);
+      //////////////////////////////
+    }   wrapperCls.propertyNames = wrapperProps
+       .filter((val, index, self) =>
+                self.indexOf(val) === index)  }}
+
+       ///////////////
+    }   catch (e) {}    }
+       
      //
     //  assign to wrapper
    //
-
-    if (attachIndexes) modifiesLength();
-
-    if (object[Symbol.iterator])
-    wrapper[Symbol.iterator] = function* () {
-      for (let val of object) {
-         yield val;
-    }};
-    else
-    if (attachIndexes)
-    wrapper[Symbol.iterator] = function* () {
-      for (let entry of Object.entries(object)) {
-       if (parseInt(key) != key)
-         yield entry;
-    }};
-    else
-    wrapper[Symbol.iterator] = function* () {
-      for (let entry of Object.entries(object)) {
-         yield entry;
-    }};
 
     var bfr, testVal=Math.random();
    /////
@@ -567,6 +569,32 @@ class ArrayWrapper {
      else
           bindGetter(prop);
     }}}
+
+    let prototype
+      = eval(object.constructor.name).prototype;
+   /////
+    if (attachIndexes) modifiesLength();
+
+    if (object[Symbol.iterator])
+    wrapper[Symbol.iterator] = function* () {
+      for (let val of object) {
+         yield val;
+    }};
+    else
+    if (attachIndexes)
+    wrapper[Symbol.iterator] = function* () {
+      for (let entry of Object.entries(object)) {
+       if (parseInt(key) != key)
+         yield entry;
+    }};
+    else
+    wrapper[Symbol.iterator] = function* () {
+      for (let entry of Object.entries(object)) {
+         yield entry;
+    }};
+
+    return wrapper;
+  ///////////////////
 
     function bindGetter (propName) {
       Object.defineProperty(wrapper, propName, {
@@ -600,8 +628,6 @@ class ArrayWrapper {
     }
 
     function modifiesLength() {
-    var i=0;
-
     if (object.hasOwnProperty("length"))
         Object.defineProperty(wrapper, "length", {
           get: () => object.length,
@@ -644,10 +670,15 @@ class ArrayWrapper {
     }}
   }
 
-  static getClassExtensions = new ArrayWrapper([],
+  static getClassExtensions = (classObj) => {
+     //  to run after class is constituted
+     let bfr
+   = new ArrayWrapper([],
     (classObj) => {
       jsonion.cur = [ArrayWrapper,
                     "getClassExtensions"];
+
+      //  resolve class object
       try {
       switch (typeof classObj) {
         case "string":
@@ -666,18 +697,29 @@ class ArrayWrapper {
                     .arguments === "object")
               return [Function];
           } catch (e) {}
-      }}    catch (e) {}
+      }}    catch (e) { jsonion.err
+                       .MISCONFIG(classObj) }
 
       if (typeof classObj !== "function") {
-          jsonion.err.MISCONFIG
+      if (!jsonion.err.MISCONFIG.length)
+           jsonion.cur = [ArrayWrapper,
+                         "getClassExtensions"],
+           jsonion.err.MISCONFIG
          ("Class not found:", classObj);
+
+      else
+           jsonion.err.log
+          (jsonion.err.MISCONFIG +
+          `: Class not found: `, classObj);
           return;
       }
 
+      //  match existing cache entry
       let entryExists = this.find(row => 
                      classObj === row[0]);
       if (entryExists) return entryExists;
 
+      //  create cache for class object
       var rowEntries=[[classObj]],
              bfr, rx=jsonion.rx.classExt;
       do {
@@ -697,9 +739,14 @@ class ArrayWrapper {
       }}  while (true)
 
       this.concat(rowEntries);
-    },
-    false, false, ["push", "concat", "find"],
-  );
+
+    }, false, false, ["push","concat","find"]);
+
+    return (ArrayWrapper
+           .getClassExtensions = bfr)(classObj);
+  }
+
+
 }
 
 class reactiveArray extends Array {
@@ -946,7 +993,12 @@ class cursorArray extends reactiveArray {
 
     let wrapArray;
     if (wrapArray)
-        wrapArray
+        wrapArray  /*
+      \           /
+       \         /
+        \       /
+         \     /
+          \  */
   }
 
   reactiveRefresh (i=-1,
@@ -1276,9 +1328,10 @@ class Workspaces extends AppContext {
 
    class executableArray extends ArrayWrapper {}
 function executableErrorMap (errorMap) {
-  if (!errorMap instanceof Array
-  &&  !errorMap instanceof executableArray)
+  if (typeof errorMap !== "object")
   return;
+
+ /// Object.getOwnPropertyNames(errorMap);
 
   var self, depth=1, throws;
   if (errorMap === this) {
@@ -1480,10 +1533,6 @@ function executableErrorMap (errorMap) {
     return res;
   }
 }
-
-//
-// ... arrayWrapper.bind() at errorMap?
-//
 
 function consoleLog (...params) {
   if (typeof jsonion      === "undefined"
