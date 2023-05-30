@@ -53,10 +53,13 @@ const jstr = new Object({
     opStack: ["\\s", "<=","=>", "*","^",":",".","&","-",">","@","#", "[","]","=","<","!","\"","\'","\`"],
       space: / +/g,
     pick: function (...keys) {
-      let res={};
+      if (!keys.length)
+           keys=Object.keys(this);
+      
+      let res=new Map();
       return keys.every(key => this[key]
-                && (res[key] = this[key]))
-                && res;
+                     && res.set(key, this[key]))
+          && res;
   }},
   timeRxReplacer: (str => {
     var res=[];
@@ -211,23 +214,24 @@ class jstrParseMd {
   constructor (renderer, assign=undefined) {
   if (typeof assign === "object")
   Object.entries(assign).forEach(([key,obj]) => {
-      renderer[key] = obj;
+    renderer[key] = obj;
   });
  /////
-  Object.entries(jstr.rx).forEach(([key,rx]) => {
-      if (typeof expr !== "function")
-             this["re"
-                 + key[0].toUpperCase()
-                 + key.substring(1)] = rx;
+  Object.entries(jstr.rx.pick())
+        .forEach(([key,rx]) => {
+    if (typeof expr !== "function")
+        this["re"
+            + key[0].toUpperCase()
+            + key.substring(1)] = rx;
   }),
   Object.defineProperty(this, "esc", {
-      get: () => {
-        if (this.__esc) return this.__esc
-                   else return renderer.esc;
-      },
-      set: (escFn) =>
-      typeof escFn === "function" &&
-     (this.__esc = escFn)
+    get: () => {
+      if (this.__esc) return this.__esc;
+                 else return renderer.esc;
+    },
+    set: (escFn) =>
+    typeof escFn === "function" &&
+   (this.__esc = escFn)
   });
   }
 }
@@ -252,9 +256,9 @@ else
 }
 
 let writer
-  = jstrParseMd(commonmark.HtmlRenderer(
-                    { sourcepos: false }),
-                    { ...yGestAirmoth  });
+  = new jstrParseMd(commonmark.HtmlRenderer(
+                        { sourcepos: false }),
+                        { ...yGestAirmoth  });
 
 let reader = new commonmark.Parser();
     reader.inlineParser.match = function (re) {
@@ -403,7 +407,6 @@ function setContainerHeader (event, type="") {
 
           else
           this.literal_.push(["**"]);
-      }
 
       this.literal_
     = this.literal_[0]; 
