@@ -5,8 +5,6 @@ const commonmark
     = require && require("./commonmark@0.30.0")
               || window.commonmark;
 
-
-
 console.log(commonmark);
 
 const jsonion = new Object({
@@ -199,8 +197,7 @@ class jstrParseMd {
                 0,"",[],[]];
   containers=[];                   literal=[ , ]
   outOfScope=true;                 literal_
-                                 = literal;
-
+                            = this.literal;
   /// ------------------------------------------
 
            renderPlugin = renderMdPlugin;
@@ -224,7 +221,13 @@ class jstrParseMd {
                  + key.substring(1)] = rx;
   }),
   Object.defineProperty(this, "esc", {
-      get: () => renderer.esc,
+      get: () => {
+        if (this.__esc) return this.__esc
+                   else return renderer.esc;
+      },
+      set: (escFn) =>
+      typeof escFn === "function" &&
+     (this.__esc = escFn)
   });
   }
 }
@@ -280,7 +283,7 @@ function renderMdPlugin (event) {
   let  type = node.type;
   let containers = this.containers;
 
-  console.log((entering && "/" || "")+node.type, node.sourcepos); // ...
+  console.log((entering && "" || "/")+node.type, node.sourcepos); // ...
   
   //  container
   if (entering) {
@@ -333,20 +336,6 @@ function renderMdPlugin (event) {
   return;
   
   switch (node.type) {
-    case "heading":
-    case "paragraph":
-    case "list":
-    case "item":
-    case "strong":
-    case "emph":
-      if (entering)
-      this.setContainerHeader(event);
-
-      else
-      this.finalizeContainerData(node.type);
-
-      break;
-
     case ("text"):
       this.renderTextLiteral(node._literal);
       break;
@@ -360,6 +349,13 @@ function renderMdPlugin (event) {
       this.finalizeContainerData(node.type);
       
       break;
+
+    default:
+      if (entering)
+      this.setContainerHeader(event);
+
+      else
+      this.finalizeContainerData(node.type);
   }
 }
  
@@ -402,26 +398,16 @@ function setContainerHeader (event, type="") {
 
     case "strong":
     case "emph":
-      if (!this.literal_)  
-
       if (type === "strong")
-          this.literal.push(["*"]);
-
-          else
-          this.literal.push(["**"]);
-
-          this.literal_
-        = this.literal.at(-1);
-      }
-      else {
           this.literal_.push(["*"]);
 
           else
           this.literal_.push(["**"]);
-
-          this.literal_
-        = this.literal_.at(-1);
       }
+
+      this.literal_
+    = this.literal_[0]; 
+
       break;
   }
 
@@ -798,7 +784,7 @@ function preparseConfigObj (cfg) {
           continue;
       }
 
-      // flatten(cat, obj); // ... //
+      flatten(cat, obj); // ... //
       invert(cat, obj);
     }
   }
@@ -971,7 +957,7 @@ function validateConfig (cfg) {
   else
   Object.entries(cfg.mappings)
         .forEach(([category, object]) => {
-    let compare = mappings[category]; // ....
+    let compare = cfg.mappings[category]; // ....
 
     if (typeof compare === "undefined")
         err.MISCONFIG(false, `cfg.mapping.${category}`);
