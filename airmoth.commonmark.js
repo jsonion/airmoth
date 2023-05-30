@@ -188,30 +188,43 @@ var configDoc = `
 `;
 
 class jstrParseMd {
- ///////////////////////////////////////////////
 
-                          sections=[];
-     literal=[];        curSection=[0,"",[],[],
-                                    0,"",[],[]];
-      curPos=[0,0];     containers=[];
-                        outOfScope=true;
+  static    validateConfig = validateConfig;
+  static getConfigDefaults = getConfigDefaults__en;
 
- ///////////////////////////////////////////////
+  //___________________________         *//*
+ /*                          */    pos=[0,0];
+      sections=[];                    // … //
+    curSection=[0,"",[],[],      //_____- -_____
+                0,"",[],[]];
+  containers=[];                   literal=[ , ]
+  outOfScope=true;                 literal_
+                                 = literal;
+
+  /// ------------------------------------------
 
            renderPlugin = renderMdPlugin;
      setContainerHeader = setContainerHeader;
   finalizeContainerData = finalizeContainerData;
        parseTextLiteral = parseTextLiteral;
 
-  static    validateConfig = validateConfig;
-  static getConfigDefaults = getConfigDefaults__en;
+                          resolveDeepContainer
+                        = resolveDeepContainer;
 
-  constructor() {
+  constructor (renderer, assign=undefined) {
+  if (typeof assign === "object")
+  Object.entries(assign).forEach(([key,obj]) => {
+      renderer[key] = obj;
+  });
+ /////
   Object.entries(jstr.rx).forEach(([key,rx]) => {
-    if (typeof expr !== "function")
-           this["re"
-               + key[0].toUpperCase()
-               + key.substring(1)] = rx;
+      if (typeof expr !== "function")
+             this["re"
+                 + key[0].toUpperCase()
+                 + key.substring(1)] = rx;
+  }),
+  Object.defineProperty(this, "esc", {
+      get: () => renderer.esc,
   });
   }
 }
@@ -235,12 +248,12 @@ else
     jsonion.err.MISCONFIG(false, cfg);
 }
 
-var writer
-  = Object.assign(commonmark.HtmlRenderer(
-                      { sourcepos: false }),
-                      {   yGestAirmoth   });
+let writer
+  = jstrParseMd(commonmark.HtmlRenderer(
+                    { sourcepos: false }),
+                    { ...yGestAirmoth  });
 
-var reader = new commonmark.Parser();
+let reader = new commonmark.Parser();
     reader.inlineParser.match = function (re) {
     var m = re.exec(this.subject.slice(this.pos));
     if (m === null)
@@ -254,21 +267,20 @@ var reader = new commonmark.Parser();
 /*  console.log(reader.inlineParser.match,
          typeof reader.inlineParser.match);
     console.log(commonmark.lib.rx.debugOffset,
-                commonmark.lib.rx.debugOffset);
+         typeof commonmark.lib.rx.debugOffset);
 ///                                           */
 var parsed = reader.parse(configDoc);
 var result = writer.render(parsed);
 
  ///////////////////////////////////////////////
-// fs.writeFileSync('./.cache/snowplants.cfg.json', JSON.stringify(customer, null, 2));
+//  fs.writeFileSync('./.cache/snowplants.cfg.json', JSON.stringify(customer, null, 2));
 
 function renderMdPlugin (event) {
   let { node, entering }=event;
   let  type = node.type;
   let containers = this.containers;
 
-
-  console.log((entering && "/" || "")+node.type, node.sourcepos);
+  console.log((entering && "/" || "")+node.type, node.sourcepos); // ...
   
   //  container
   if (entering) {
@@ -342,50 +354,15 @@ function renderMdPlugin (event) {
     case ("link"):
       if (entering)
       this.setContainerHeader(event),
-      this.esc(node.destination),
-      this.esc(node.title);
-
+      this.literal_.push(this.esc(node.title));
+                         // node.destination
       else
       this.finalizeContainerData(node.type);
       
       break;
   }
 }
-
-function finalizeContainerData (type) {
-  let containers = this.containers;
-
-  switch (type) {
-    case "heading":
-      let level = containers.at(-1);
-
-      //  compare with sections index and cfg
-      //  ...
-
-      // </heading>
-      break;
-
-    case "list":
-    case "item":
-      break;
-
-    case "strong":
-    case "emph":
-      if (typeof this.literal.at(-1)
-                        === "object") {
-      let row
-        = this.literal.at(-1);
-
-          this.literal
-         [this.literal.length-1]
-          = row[0]
-          + row.slice(1,-1).join(" ")
-          + row.at(-1);
-      }
-      break;
-  }
-}
-
+ 
 function setContainerHeader (event, type="") {
   let { level, sourcepos } = event.node;
   let { curSection, containers } = this;
@@ -425,12 +402,26 @@ function setContainerHeader (event, type="") {
 
     case "strong":
     case "emph":
+      if (!this.literal_)  
+
       if (type === "strong")
-      this.literal.push(["*"]);
+          this.literal.push(["*"]);
 
-      else
-      this.literal.push(["**"]);
+          else
+          this.literal.push(["**"]);
 
+          this.literal_
+        = this.literal.at(-1);
+      }
+      else {
+          this.literal_.push(["*"]);
+
+          else
+          this.literal_.push(["**"]);
+
+          this.literal_
+        = this.literal_.at(-1);
+      }
       break;
   }
 
@@ -443,18 +434,73 @@ function setContainerHeader (event, type="") {
   }
 }
 
-function parseTextLiteral (str) {
-  if (this.curContainer.at(-1) === null)
-  return;
+function finalizeContainerData (type) {
+  let containers = this.containers;
 
+  switch (type) {
+    case "heading":
+      let level = containers.at(-1);
+
+      //  compare with sections index and cfg
+      //  ...
+
+      // </heading>
+      break;
+
+    case "list":
+    case "item":
+      break;
+
+    case "strong":
+    case "emph":
+      let inline
+        = resolveDeepContainer(nestedText);
+      break;
+  }
+
+  if (this.literal_)
+      this.literal_ = null;
+    ////////////////////////
+            return;
+
+  function nestedText (literal_=null) {
+    var inline = "";
+
+    if (!literal_)
+       { literal_=this.literal;
+         var root=true }
+
+    for (let str of literal_) {
+     if (typeof str === "object")
+         inline += nestedText(str);
+
+         else
+         inline += " " + str.trim();
+    }
+
+    return inline;
+  }
+}
+
+function resolveDeepContainer (fn) {
+  fn.call(this);
+}
+
+function parseTextLiteral (str) {
   let [key, alias] = this.cfg.slice(3);
   let {opStack, space} = this;
   
   console.log(str);
   str = str.trim(); // ... what's the difference
 
-  switch (curContainer.at(-1)) {
+  var literal = this.literal_ ||
+                this.literal;
+
+  switch (containers.at(-1)) {
     case "heading":
+      this.literal.push()
+      if (!this.curSection[4])
+
       break;
 
     case "list":
@@ -473,9 +519,7 @@ function parseTextLiteral (str) {
 
      ///////////////////////////////////////////
     //  word term (preceeding opcodes symbols)
-    if (alias[term]) {
-        alias[term]
-
+    if (alias[term])
     for (let aliasTerm of alias[term]) {
     switch (aliasTerm[0]) {
       case ("directional"):
@@ -585,9 +629,9 @@ function parseTextLiteral (str) {
       case (key.repetition):
         break;
     }
-  } jstr.rx.opStack.lastIndex=0;
-   //////////////////////////////
-  // this.out(node.literal);
+  }   this.reOpStack.lastIndex=0;  // ...
+   /////////////////////////////////
+  //  this.out(node.literal);
 }
 
 function render (ast) {
@@ -635,10 +679,10 @@ function getConfigDefaults__en () {
   let moveSequences = [];
 
   let sections = [
-  ["h1", "Z", "Keyboard profile"],
+  ["h1", "keyboardProfile", "Keyboard profile"],
   ["h1", "sequences", "Move sequences"],
-  ["h1", "syntax", "Syntax"],
   ["h2", "addSequence", "[Add new sequence](javascript:newSequence)"],
+  ["h1", "syntax", "Syntax"],
   ["h2", "directionSubsets", "Direction subsets"],
   ["h2", "sequenceTypes", "Sequence types"],
   ["h2", "modifiers", "Sequence modifiers"],
@@ -754,7 +798,7 @@ function preparseConfigObj (cfg) {
           continue;
       }
 
-      // flatten(cat, obj);
+      // flatten(cat, obj); // ... //
       invert(cat, obj);
     }
   }
@@ -927,7 +971,7 @@ function validateConfig (cfg) {
   else
   Object.entries(cfg.mappings)
         .forEach(([category, object]) => {
-    let compare = mappings[category];
+    let compare = mappings[category]; // ....
 
     if (typeof compare === "undefined")
         err.MISCONFIG(false, `cfg.mapping.${category}`);
@@ -936,8 +980,10 @@ function validateConfig (cfg) {
           .forEach(([key,val]) => {
       let compareVal = compare[key];
 
-      if (typeof compareVal === "undefined")
+      if (typeof compareVal === "undefined") {
           err.MISCONFIG(false, `cfg.mappings.${category}.${key}`);
+          return;
+      } /// .. ///
 
       mappingEntry(key, val, compareVal,
                    category, object);
