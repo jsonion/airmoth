@@ -745,8 +745,6 @@ class ArrayWrapper {
     return (ArrayWrapper
            .getClassExtensions = bfr)(classObj);
   }
-
-
 }
 
 class reactiveArray extends Array {
