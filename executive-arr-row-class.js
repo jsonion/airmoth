@@ -812,7 +812,9 @@ class reactiveArray extends Array {
        ["delElementsCount",[delElementsCount]]);
         return;
     }
-
+  
+     ///////////////////////////////
+    //  attenzione, concentrazione
     return (
     this.updateSubs = Object.assign(function(){
       try {
