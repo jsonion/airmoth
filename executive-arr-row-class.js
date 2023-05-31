@@ -384,7 +384,7 @@ class MotionFilter { // ext
   evaluateAction() {}
 }
 
-class SublimeText extends InputActivity {}
+class SublimeText extends InputActivity {} var j=0, k=0, c;
 
     ////////////////
 class ArrayWrapper {
@@ -429,27 +429,24 @@ class ArrayWrapper {
              && attachIndexes
              || true;
 
-    if (typeof returnExecFn === "function"
-            && returnExecFn.prototype)
+    if (typeof returnExecFn === "function")
           this.returnExecFn = returnExecFn;
    /////
-    if (typeof this.returnExecFn === "function"
-    &&         this.returnExecFn.prototype) {
-         ////
-               this.returnExecFn.bind(arr);
-        return ArrayWrapper
-              .bind(this.instance,
-                    this.returnExecFn,
-                    this.inheritProps,
-                    this.classOverride,
-                    this.attachIndexes);
+    if (typeof this.returnExecFn === "function") {
+               this.returnExecFn.bind(array);
+        return ArrayWrapper.bind
+                .call(this, this.returnExecFn,
+                            this.inheritProps,
+                            this.classOverride,
+                            this.attachIndexes);
     }
     else {
-    ArrayWrapper.bind(this.instance,
-                      this,
-                      this.inheritProps,
-                      this.classOverride,
-                      this.attachIndexes);
+    ArrayWrapper.bind
+                .call(this, this.instance,
+                            this,
+                            this.inheritProps,
+                            this.classOverride,
+                            this.attachIndexes);
     if (Object
        .hasOwnProperty(this, "returnExecFn"))
                        this.returnExecFn
@@ -466,7 +463,6 @@ class ArrayWrapper {
     ||  typeof object  !== "object"
     || (typeof wrapper !== "object"
     &&  typeof wrapper !== "function")) {
-    if (!jsonion.err.TYPE.length)
         jsonion.cur = [ArrayWrapper, "bind"],
         jsonion.err
        .TYPE(["array",  [object]],
@@ -474,11 +470,6 @@ class ArrayWrapper {
              ["inheritProps", [inheritProps]],
              ["classOverride",[classOverride]],
              ["attachIndexes",[attachIndexes]]);
-    else
-        jsonion.err.log
-       (jsonion.err.TYPE +
-        `: Class not found: `, classObj);
-    
         return;
     }
 
@@ -540,9 +531,9 @@ class ArrayWrapper {
        .filter((val, index, self) =>
                 self.indexOf(val) === index)  }}
 
-       ///////////////
-    }   catch (e) {}    }
-       
+    }   catch (e)   { inheritProps = [] }}
+      /////////////
+
      //
     //  assign to wrapper
    //
@@ -671,10 +662,13 @@ class ArrayWrapper {
   }
 
   static getClassExtensions = (classObj) => {
-     //  to run after class is constituted
-     let bfr
-   = new ArrayWrapper([],
-    (classObj) => {
+    //   unwrap after class is constituted
+    ArrayWrapper.getClassExtensions = null;
+
+    let arr = new Array();
+    let bfr
+  = new ArrayWrapper(arr,
+   (classObj) => {
       jsonion.cur = [ArrayWrapper,
                     "getClassExtensions"];
 
@@ -701,22 +695,16 @@ class ArrayWrapper {
                        .MISCONFIG(classObj) }
 
       if (typeof classObj !== "function") {
-      if (!jsonion.err.MISCONFIG.length)
-           jsonion.cur = [ArrayWrapper,
-                         "getClassExtensions"],
-           jsonion.err.MISCONFIG
+          jsonion.cur = [ArrayWrapper,
+                        "getClassExtensions"],
+          jsonion.err.MISCONFIG
          ("Class not found:", classObj);
-
-      else
-           jsonion.err.log
-          (jsonion.err.MISCONFIG +
-          `: Class not found: `, classObj);
-          return;
+                                 return;
       }
 
       //  match existing cache entry
-      let entryExists = this.find(row => 
-                     classObj === row[0]);
+      let entryExists = arr.find(row =>
+                    classObj === row[0]);
       if (entryExists) return entryExists;
 
       //  create cache for class object
@@ -731,14 +719,14 @@ class ArrayWrapper {
           rowEntries
             .forEach(row => row.push(classObj));
 
-      if (bfr = this.find((row) =>
-                           row[0] === classObj)) {
+      if (bfr = arr.find((row) =>
+                          row[0] === classObj)) {
           rowEntries.every(row =>
                            row.concat(bfr));
           break;
       }}  while (true)
 
-      this.concat(rowEntries);
+      arr.concat(rowEntries);
 
     }, false, false, ["push","concat","find"]);
 
@@ -1092,21 +1080,18 @@ class cursorArray extends reactiveArray {
     if ((vals.length))
     i = (vals[0].length === 2               &&
          vals[0][0] instanceof cursorArray  &&
-         Number.isInteger(vals[0][1])       &&
-         Number.parseFloat(vals[0][1])
-      == Number.parseInt(vals[0][1]))
+         Number.isInteger(vals[0][1]))
     ||  (vals.find(i =>
                    i.length === 2
                &&  i[0] instanceof cursorArray
-               && (!isNaN(i[1]))
-               &&   parseInt(i[1]) == i[1]))
+               &&  Number.isInteger(i[1])))
     ||  [this, 0];
 
     if (!vals.length)
     result = [];
 
     else
-    result = Object.assign(new Object, {  
+    result = Object.assign(new Object(), {
     [Symbol.iterator]: function* () {
      let keys=Object.keys(obj).sort((a,b)=>a>b);
      for (let i=0; i<=keys.at(-1); i++) {
@@ -1341,13 +1326,8 @@ function executableErrorMap (errorMap) {
        errorMap =
             new executableArray(errorMap);
 
-  console.log(errorMap instanceof Array);
-  console.log(errorMap instanceof ArrayWrapper);
-  console.log(errorMap instanceof executableArray);
-
-  console.log(Object.getOwnPropertyNames(errorMap));
-
-  Object.entries(this).forEach(([key,str]) => {
+  Object.entries(self || errorMap).forEach(
+ ([key, str]) => {
   if (typeof str === "string") {
   //  set up executable error message types
       errorMap[key]=function (...msg) {
@@ -1366,6 +1346,8 @@ function executableErrorMap (errorMap) {
             msg[i]
           = msg[i][0];
       }}
+
+      console.log(typeof ArrayWrapper.getClassExtensions, ArrayWrapper.getClassExtensions)
 
       errorMap.push([key,
      (!msg.length) ? str : `${str}:`, ...msg]);
