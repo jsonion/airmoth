@@ -1,11 +1,51 @@
+<html>
+<head>
+<script type="text/javascript" src="./commonmark@0.30.0.js"></script>
+<script type="text/javascript">
+
+Array.prototype._concat = function (...arrays) {
+  consoleLog("concat", this.concat(...arrays));
+};
+
+Array.prototype._splice = function (i=0, del=0, ...vals) {
+  let item = [...this];
+  this.splice(i, del, ...vals);
+
+  consoleLog("splice", i, del, item, this);
+};
+
+Array.prototype._push = function (...vals) {
+  consoleLog("push", ...vals);
+  this.push(...vals);
+}
+
+Array.prototype._pop = function (n=1) {
+  consoleLog("pop", n, this.pop());
+}
+
+Array.prototype._findLastIndex = function (fn) {
+  let res = this.findLastIndex(fn);
+  consoleLog("findLastIndex", res, this[res]);
+}
+
+for (let i=0; i<=8; i++) {
+  Object.defineProperty(Array.prototype, `_${i}`, {
+     get: function () {
+          return this[i];
+     },
+     set: function (val) {
+          consoleLog("set", i, this[i], val);
+          this[i] = val;
+     },
+  });
+}
+
 const {existsSync, readFileSync, writeFileSync}
-    = require && require("fs") || null;
+    = typeof require !== "undefined" && require("fs") || {};
 
 const commonmark
-    = require && require("./commonmark@0.30.0")
-              || window.commonmark;
-
-console.log(commonmark);
+    = typeof require !== "undefined" && require("./commonmark@0.30.0")
+      || window.commonmark;
 
 const jsonion = new Object({
 ///  ---------
@@ -15,9 +55,9 @@ const jsonion = new Object({
    fnName: /(?:(class|function\**) ([^\s\{]+|[^\s\(]+)|\([^\)]*\)\s*=>\s*{)/g,
  },
  rxFromArray,
+ encodeRxSpecialChars,
  encode_unsafe:[ encodeRxSpecialChars, 
                  commonmark.lib.encode_unsafe ],
-
  log: consoleLog,
  err:{ TYPE: "Type mismatch",
        PATH: "Path not found",
@@ -27,19 +67,25 @@ const jsonion = new Object({
      OUTPUT: "Function output invalid",
   MISCONFIG: "Misconfiguration",
    suppress: false,
-        log: consoleError,
-   makeExec:
-  (typeof executableErrorMap === "function" &&
-          executableErrorMap)               ||
-   function (errorMap = this) {
-   Object.entries(this).forEach(([e,str]) => {
+       emit: consoleTrace,
+   reportArgDepth: 10,
+   reportArgValue: true,
+   makeExecutable:
+  (typeof makeExecutableErrorMap === "function"
+       && makeExecutableErrorMap) ||
+   function (errorTypes = this) {
+   var errorMap = [];
+   if (errorTypes === this)
+       jsonion.err = errorMap;
+
+   Object.entries(errorTypes)
+         .forEach(([type,err]) => {
    if (typeof str === "string")
-       errorMap[e] = function (...msg) {
-       return
-       errorMap.push([e,
-      (!msg.length) ? str : `${str}:`, ...msg]);
+       errorMap[err] = function (...msg) {
+       errorMap.push([err,
+      (!msg.length) ? err : `${err}:`, ...msg]);
    }})}
-}}); jsonion.err.makeExec();
+}});  
 
 const jstr = new Object({
  ///  ----
@@ -50,18 +96,18 @@ const jstr = new Object({
     symbols: /[^\w\s[[:cntrl:]]]/g,
     sameChr: /^(?<c>.)\k<c>+$/,
     heading: /h([1-6])/g,
-    opStack: ["\\s", "<=","=>", "*","^",":",".","&","-",">","@","#", "[","]","=","<","!","\"","\'","\`"],
+    opStack: ["\\s+", "<=","=>", "*","^",":",".","&","-",">","@","#", "[","]","=","<","!","\"","\'","\`"],
       space: / +/g,
     pick: function (...keys) {
       if (!keys.length)
            keys=Object.keys(this);
       
-      let res=new Map();
+      let res=new Array();
       return keys.every(key => this[key]
-                     && res.set(key, this[key]))
-          && res;
+             && res.push([key, this[key]]))
+             && res;
   }},
-  timeRxReplacer: (str => {
+  timeRxReplacer: (str) => {
     var res=[];
     if (typeof str === "string"
             && str.length)
@@ -71,20 +117,12 @@ const jstr = new Object({
 
     res.push(str);
     return res;
-  }),
+  },
 
-  //////////////////////
- // method names draft
-/*
-  parseAlias,
-  parseModifier,
-  parseDefaultValue,
-
-  storeAlias,
-  storeModifier,
-  storeDefaultValue,
- */
-
+   ////////////////
+  //  methods ...
+  validateConfig,
+  getConfigDefaults: getConfigDefaults__en,
 });
 
 var configDoc = `
@@ -188,79 +226,81 @@ var configDoc = `
   medium <= m
 `;
 
-class jstrParseMd {
+setTimeout(() => {
+  var cfg = typeof require !== "undefined"
+   && existsSync("./snowplants.cfg.json")
+   && readFileSync("./snowplants.cfg.json");
 
-  static    validateConfig = validateConfig;
-  static getConfigDefaults = getConfigDefaults__en;
+  jsonion.err = new ErrorMap(jsonion.err);
+  jsonion.log
+        = (...args) => jsonion.err.push(args)
+                    && jsonion.err.log(...args);
+  jstr.rx.opStack
+        = void jsonion.rxFromArray ||
+           new RegExp(jsonion.encodeRxSpecialChars(jstr.rx.opStack));
+
+  let jstrAirmoth
+    = new jstrParseMd(commonmark, cfg);
+
+      jstrAirmoth.run(configDoc);
+}, 10);
+
+class jstrParseMd {
+static validateConfig=jstr.validateConfig;
+static getConfigDefaults=jstr.getConfigDefaults;
 
   //___________________________         *//*
  /*                          */    pos=[0,0];
-      sections=[];                    // … //
-    curSection=[0,"",[],[],      //_____- -_____
-                0,"",[],[]];
-  containers=[];                   literal=[ , ]
-  outOfScope=true;                 literal_
+    curSection=[                      // … //
+          0,"",[],[],            //_____- -_____
+          0,"",[],[], ""];
+    containers=[];                 literal=[ , ]
+    outOfScope=0;                  literal_
                             = this.literal;
-  /// ------------------------------------------
+/// expr=[];  __________________________________
+   ahead=[];
+  walker;
 
-           renderPlugin = renderMdPlugin;
-     setContainerHeader = setContainerHeader;
-  finalizeContainerData = finalizeContainerData;
-       parseTextLiteral = parseTextLiteral;
+  constructor (commonmark, cfg) {
+    jsonion.cur = this;
 
-                          resolveDeepContainer
-                        = resolveDeepContainer;
+    if (typeof commonmark !== "object")
+        jsonion.err.INPUT(false,["commonmark",
+                                [ commonmark ]]);
+    if (cfg) {
+    if (!jstrParseMd.validateConfig(cfg))
+         jsonion.err.MISCONFIG(false,
+                              ["cfg",[cfg]]);
+         else
+         this.cfg = cfg;
+    }
+    else
+    this.cfg = jstrParseMd.getConfigDefaults();
 
-  constructor (renderer, assign=undefined) {
-  if (typeof assign === "object")
-  Object.entries(assign).forEach(([key,obj]) => {
-    renderer[key] = obj;
-  });
- /////
-  Object.entries(jstr.rx.pick())
-        .forEach(([key,rx]) => {
-    if (typeof expr !== "function")
-        this["re"
-            + key[0].toUpperCase()
-            + key.substring(1)] = rx;
-  }),
-  Object.defineProperty(this, "esc", {
-    get: () => {
-      if (this.__esc) return this.__esc;
-                 else return renderer.esc;
-    },
-    set: (escFn) =>
-    typeof escFn === "function" &&
-   (this.__esc = escFn)
-  });
-  }
-}
+    jstr.rx.pick()
+           .forEach(([key,rx]) => {
+         if (rx instanceof RegExp)
+             this["re" + key[0].toUpperCase()
+                       + key.substring(1)] = rx;
+    });
+    this.rx = this.reOpStack;
 
-var cfg = require
- && existsSync("./snowplants.cfg.json")
- && readFileSync("./snowplants.cfg.json");
+    let reader = new commonmark.Parser();
+    let writer = new commonmark
+       .HtmlRenderer({ sourcepos: false });
 
-let yGestAirmoth
-  = { render, plugin: new jstrParseMd };
+    this.reader = reader;
+    this.writer = writer;
+    this.writer.render
+         = this.replaceRenderFn();
 
-if (!cfg)
-    yGestAirmoth.cfg
-    = cfg
-    = jstrParseMd.getConfigDefaults(cfg);
-else {
-if (jstrParseMd.validateConfig 
-&&  jstrParseMd.validateConfig(cfg))
-    yGestAirmoth.cfg = cfg;
-else
-    jsonion.err.MISCONFIG(false, cfg);
-}
+    //  setup cache
+    this.ahead[0] = new Array();
+    this.ahead[1] = new Object();
 
-let writer
-  = new jstrParseMd(commonmark.HtmlRenderer(
-                        { sourcepos: false }),
-                        { ...yGestAirmoth  });
+    return this;
+  ////////////////
 
-let reader = new commonmark.Parser();
     reader.inlineParser.match = function (re) {
     var m = re.exec(this.subject.slice(this.pos));
     if (m === null)
@@ -269,259 +309,546 @@ let reader = new commonmark.Parser();
         this.pos += m.index + m[0].length;
         return m[0];
 
-    console.log(re.source);
-},  commonmark.lib.rx.debugOffset=[0,0,0];
-/*  console.log(reader.inlineParser.match,
-         typeof reader.inlineParser.match);
-    console.log(commonmark.lib.rx.debugOffset,
-         typeof commonmark.lib.rx.debugOffset);
+        consoleLog(re.source);
+    },  commonmark.lib.rx.debugOffset=[0,0,0];
+
+/*  consoleLog(reader.inlineParser.match,
+        typeof reader.inlineParser.match);
+    consoleLog(commonmark.lib.rx.debugOffset,
+        typeof commonmark.lib.rx.debugOffset);
 ///                                           */
-var parsed = reader.parse(configDoc);
-var result = writer.render(parsed);
-
- ///////////////////////////////////////////////
-//  fs.writeFileSync('./.cache/snowplants.cfg.json', JSON.stringify(customer, null, 2));
-
-function renderMdPlugin (event) {
-  let { node, entering }=event;
-  let  type = node.type;
-  let containers = this.containers;
-
-  console.log((entering && "" || "/")+node.type, node.sourcepos); // ...
-  
-  //  container
-  if (entering) {
-  if (type === "heading")
-      containers.splice(-1,0, node.type,
-                              node.level);
-      else
-      containers.push(node.type);
   }
 
-  //   skip: image custom_inline custom_block
-  //   ... text within is left unparsed
-  if (type === "image"
-  ||  type === "block_quote"
-  ||  type === "custom_inline"
-  ||  type === "custom_block") {
-  if (entering)
-      this.outOfScope ++;
+  run (text) {
+    jsonion.cur = [this, "run"];
 
-      else
-      this.outOfScope --;
+    let parsed  = this.reader.parse(text);
+    this.result = this.writer.render(parsed);
 
-      return;
+    return this.result;
   }
 
-  //  … skip headings and lists beyond 2nd level
-  if (this.outOfScope)
-  switch (entering) {
-    case (true):
-      if (type === "heading"
-      ||  type === "list")
-          this.outOfScope ++;
+  isContainer (type) {
+    switch (type) {
+      case "heading":
+      case "paragraph":
+      case "list": 
+      case "item":
+      case "emph":
+      case "strong":
+  /// case "document":
+  /// case "link":
+           return true;
 
-      return;
+      case "block_quote":
+      case "image":
+      case "custom_inline":
+      case "custom_block":
+           return true;
 
-    case (false):
-      if (node.type === "heading")
-          containers.splice(-2,2);
-      else
-          containers.pop();
+      default:
+           return false;
+  }}
 
-      if (type === "heading"
-      ||  type === "list")
-          this.outOfScope --;
+  replaceRenderFn() {
+  let instance = this;
+  return function (ast) {
+      var walker = ast.walker(),
+          event,
+          type;
 
-      return;
-  }
+      instance.walker
+             = walker;
 
-  if (this.outOfScope)
-  return;
-  
-  switch (node.type) {
-    case ("text"):
-      this.renderTextLiteral(node._literal);
-      break;
+      this.buffer  = "";
+      this.lastOut = "\n";
 
-    case ("link"):
-      if (entering)
-      this.setContainerHeader(event),
-      this.literal_.push(this.esc(node.title));
-                         // node.destination
-      else
-      this.finalizeContainerData(node.type);
-      
-      break;
+      while (event = walker.next()) {
+        type=event.node.type;
 
-    default:
-      if (entering)
-      this.setContainerHeader(event);
+        if (this[type])
+            this[type](event.node,
+                       event.entering);
 
-      else
-      this.finalizeContainerData(node.type);
-  }
-}
- 
-function setContainerHeader (event, type="") {
-  let { level, sourcepos } = event.node;
-  let { curSection, containers } = this;
+        instance.main.call(instance, event);
+      }
 
-  if (!type)
-       type = node.type;
+      return this.buffer;
+  }}
 
-  switch (type) {
-    case "heading":
-      let [h1_level, h1_key] = curSection;
-      let [h2_level, h2_key] = curSection
-                                 .slice(4,6);
-      if (!h1_level
-      ||   h1_level === level)
-           curSection.splice(0,2,level,""),
-           curSection[2] = sourcepos[0]; 
+  main (event) {
+    let { node, entering }=event;
+    let  type = node.type;
 
-      else
-      if (!h2_level
-      ||   h2_level === level)
-           curSection.splice(3,2,level,""),
-           curSection[6] = sourcepos[0];
+    //  in matter
+    if (this.curSection[8]
+    &&  this.outOfScope === 0) {
+    let [key, alias]
+      = this.cfg[0][curSection[8]];
 
-      else
-      this.outOfScope ++;
+    switch (type) {
+      case ("text"):
+      case ("code"):
+        this.rx.lastIndex=0;
+        this[section]
+            (type, node.literal, key, alias);
 
-      break;
+        return;
 
-    case "paragraph":
-    case "list":
-    case "item":
-      if (type === "list"
-      &&  containers.indexOf(type) !== -1)
-          this.outOfScope ++;
+      case ("link"):
+        if (!entering)
+        break;
+                  /// node.destination
+        var literal = node.title;
+              event = this.next();
 
-      break;
+        this.rx.lastIndex=0;
+        this[section]
+            (type, literal, key, alias);
 
-    case "strong":
-    case "emph":
-      if (type === "strong")
-          this.literal_.push(["*"]);
+        this.writer[type](event.node,
+                          event.entering);
+        return;
 
-          else
-          this.literal_.push(["**"]);
+      case ("linebreak"):
+      case ("softbreak"):
+        this.main(this.next());
+        return;
+    }}
 
-      this.literal_
-    = this.literal_[0]; 
+     ///////////
+    //  debug
+    if (jsonion.mode === "development"
+    || !jsonion.err.suppress) {
+    if (this.isContainer(type)) {
+    if (entering) {
+    if (type === "heading")
+        consoleLog(`<heading.${node.level}>`, node.sourcepos);
 
-      break;
-  }
+        else
+        consoleLog("<"+node.type+">", node.sourcepos);
 
-  if (sourcepos) {
-  if (curSection[0])
-      curSection[3] = sourcepos[1];
+    }
+    else
+    if (!entering)
+        consoleLog("</"+node.type+">");
+    }
+    else
+    if (node._literal)
+        consoleLog("<"+node.type+">", node._literal);
 
-  if (curSection[4])
-      curSection[7] = sourcepos[1];
-  }
-}
+        else
+        consoleLog("<"+node.type+">");
+    } //////////////////////////////////
 
-function finalizeContainerData (type) {
-  let containers = this.containers;
+    if (type === "document"
+    || !this.isContainer(type))
+   /////////
+    return;
 
-  switch (type) {
-    case "heading":
-      let level = containers.at(-1);
+    //  resolve container data
+    if (this.outOfScope === 0) {
+    if (entering)
+        this.setContainerData(event);
 
-      //  compare with sections index and cfg
-      //  ...
-
-      // </heading>
-      break;
-
-    case "list":
-    case "item":
-      break;
-
-    case "strong":
-    case "emph":
-      let inline
-        = resolveDeepContainer(nestedText);
-      break;
-  }
-
-  if (this.literal_)
-      this.literal_ = null;
-    ////////////////////////
-            return;
-
-  function nestedText (literal_=null) {
-    var inline = "";
-
-    if (!literal_)
-       { literal_=this.literal;
-         var root=true }
-
-    for (let str of literal_) {
-     if (typeof str === "object")
-         inline += nestedText(str);
-
-         else
-         inline += " " + str.trim();
+        else
+        this.finalizeContainerData(type);
     }
 
-    return inline;
+    //  skip (text within is unprocessed)
+    if (type === "image"
+    ||  type === "block_quote"
+    ||  type === "custom_block"
+    ||  type === "custom_inline") {
+    if (entering)
+        this.outOfScope++;
+
+        else
+        this.outOfScope--;
+
+        return;
+    }
+    else
+    if (this.outOfScope)
+    //  headings and lists beyond 2nd level
+    switch (entering) {
+      case (true):
+        if (type === "heading"
+        ||  type === "list")
+            this.outOfScope ++;
+
+        return;
+
+      case (false):
+        if (type === "heading")
+            this.containers._splice(-2,2);
+
+            else
+            this.containers._pop();
+
+        if (type === "heading"
+        ||  type === "list")
+            this.outOfScope --;
+
+        return;
+    }
   }
-}
 
-function resolveDeepContainer (fn) {
-  fn.call(this);
-}
+  setContainerData (event, type="") {
+    jsonion.cur = [this, "setContainerData"];
 
-function parseTextLiteral (str) {
-  let [key, alias] = this.cfg.slice(3);
-  let {opStack, space} = this;
-  
-  console.log(str);
-  str = str.trim(); // ... what's the difference
+    let { level, sourcepos } = event.node;
+    let { curSection, containers } = this;
 
-  var literal = this.literal_ ||
-                this.literal;
+    if (!type)  //  optimization
+         type = event.node.type;
 
-  switch (containers.at(-1)) {
-    case "heading":
-      this.literal.push()
-      if (!this.curSection[4])
+    switch (type) {
+      case "heading":
+        //  open new section heading
+        let [h1_level, h1_key] = curSection;
+        let [h2_level, h2_key] = curSection
+                                   .slice(4,6);
 
-      break;
+        if (!h1_level
+        ||   h1_level === level)
+             curSection[0] = level,
+             curSection[2] = sourcepos[0];
 
-    case "list":
-    case "item":
-      break;
+        else
+        if (!h2_level
+        ||   h2_level === level)
+             curSection[4] = level,
+             curSection[6] = sourcepos[0];
 
-    default:
-      break;
+        else
+        this.outOfScope ++;
+
+        var closePrevHeading;
+       /////
+        if (!this.outOfScope) {
+            closePrevHeading
+          = containers._findLastIndex((lvl,
+                                       idx) => {
+            if (typeof lvl === "number"
+            &&  lvl == level
+            &&  idx != 1)
+                return true;
+            });
+
+        if (closePrevHeading >= 0)
+            containers
+           ._splice(closePrevHeading-1, 2,
+                                  type, level);
+        else
+            containers
+           ._concat([type, level]);
+        }
+
+        break;
+
+      case "paragraph":
+      case "list":
+      case "item":
+        if (type === "list"
+        &&  containers.indexOf(type)
+        !=  containers.lastIndexOf(type))
+            this.outOfScope ++;
+
+        else
+        containers._push(type);
+
+        break;
+
+      case "strong":
+      case "emph":
+        if (type === "strong")
+            this.literal_.push(["*"]);
+
+            else
+            this.literal_.push(["**"]);
+
+        this.literal_
+      = this.literal_[0];
+
+        containers._push(type);
+        break;
+
+      default:
+       return;
+    }
+
+    if (sourcepos) {
+    if (curSection[0])
+        curSection[3] = sourcepos[1];
+
+    if (curSection[4])
+        curSection[7] = sourcepos[1];
+    }
   }
 
-     var match;
-  while (match = this.reOpStack.exec(str)) {
-    let [op] = match;
-    let term = str.substring(match.index,
-                  this.reSpace.lastIndex);
+  finalizeContainerData (type) {
+    jsonion.cur=[this, "finalizeContainerData"];
+    let { containers, curSection }
+                           = this;
 
-     ///////////////////////////////////////////
-    //  word term (preceeding opcodes symbols)
-    if (alias[term])
-    for (let aliasTerm of alias[term]) {
-    switch (aliasTerm[0]) {
+    if (type !== "heading")
+    switch (type) {
+      case "paragraph":
+      case "list":
+      case "item":
+        containers._pop();
+        break;
+
+      case "strong":
+      case "emph":
+        if (type === "strong")
+            this.literal_.push("*");
+
+            else
+            this.literal_.push("**");
+
+        resolveDeepContainer(markupNestedText);
+        break;
+
+      default:
+       return;
+    }
+    else
+    if (type === "heading") {
+    let h1 = curSection[0];
+    let h2 = curSection[4];
+    let level
+     =  containers[containers.length-1];
+
+    let title
+     =  this.literal.join(" ");
+   /////
+    var sectionKey;
+
+    if (title)
+    switch (level) {
+      case (h1):
+            sectionKey
+          = this.cfg[2].find(section =>
+                    "h1" === section[0] &&
+                   title === section[2])[1];
+
+        if (sectionKey) {
+            curSection[1] = sectionKey;
+
+        if (sectionKey   ===  "moveSequences")
+            curSection[8] = "parseMoveSequence";
+
+            else
+            curSection[8] = sectionKey;
+        }
+        else
+            curSection[8] = "";
+
+        break;
+
+      case (h2):
+            sectionKey
+          = this.cfg[2].find(section =>
+                    "h2" === section[0] &&
+                   title === section[2])[1];
+
+        if (!sectionKey) {
+            curSection[8] = "";
+            break;
+        }
+
+        switch (curSection[1]) {
+          case ("moveSequences"):
+            curSection[8] =
+              (sectionKey === "addMoveSequence")
+                          ?   "addMoveSequence"
+                          : "parseMoveSequence";
+            break;
+
+          case ("syntax"):
+            curSection[8] = "parseSyntaxSection";
+            break;
+
+          default:
+            curSection[8] = sectionKey;
+        }   curSection[5] = sectionKey;
+
+        break;
+    }}
+
+     ///////////
+    //  debug
+    if (sectionKey) {
+    if (level === curSection[0])
+        consoleLog("#".repeat(curSection[0])+" "+curSection[1]);
+    else
+    if (level === curSection[4])
+        consoleLog("#".repeat(curSection[4])+" "+curSection[5]);
+    }
+
+    if (this.literal_)
+        this.literal_=null
+      //////////////////////
+             return;
+
+    function resolveDeepContainer (fn, ...args)
+   { fn.call(this, ...args) }
+    function markupNestedText (literal_ = null) {
+    if (!literal_)
+       { literal_ = this.literal }
+
+    for (let i=0; i<literal_.length; i++) {
+         let strObjXOR = literal_[i];
+
+         if (typeof strObjXOR === "object") {
+         if (       strObjXOR === this.literal_) {
+         if (this.literal_.length < 3) {
+                  literal_[i]
+           = this.literal_.join("");
+         }
+         else
+         if (this.literal.length > 2) {
+             literal_[i]
+           = this.literal.at(0)
+           + this.literal.slice(1,
+                     this.literal.length-1)
+                                 .join(" ")
+           + this.literal.at(-1);
+           ////////////////////////////
+         }   this.literal_ = literal_   }
+         else
+         markupNestedText(literal_);
+    }}
+  }}
+
+  keyboardProfile (type=null, term,
+                         key, alias) {
+    var op;
+
+    //  left field
+    if (term === "[") // opt.
+    [type, term] = this.next();
+
+    else
+    [term, op] = this.ahead();
+
+    if (typeof alias[term] === "string")
+    var field = alias[term];
+
+    if (op === ":")
+       [term, op] = this.ahead();
+
+    else {
+    ////
+         [type, term] = this.next();
+      if (term === "]")
+      [type, term] = this.next(),
+      [term, op]   = this.ahead();
+
+      if (op === ":")
+      [term, op] = this.ahead();
+       term =
+       term.trim();
+    }
+
+    switch (field) {
       case ("directional"):
-        if (this.hContainer === "")
+        var array, i=0;
+        if (term.length)
+            array = term.split(",");
+        
+        do {
+        if (!array)
+           [type, term] = this.next();
+
+            else
+            term = array[i], i++;
+        if (term) {
+
+            //
+           //
+          // ...
+         //
+
+        } else break;
+        } while (true)
         break;
 
-      case ("default"):
+      case ("A"):
+      case ("B"):
+      case ("select"):
+      case ("return"):
+        break;
+    }
+  }
+
+  parseMoveSequence (type=null, term,
+                           key, alias) {}
+
+  addMoveSequence (type=null, term,
+                         key, alias) {}
+
+  syntaxDirectionSubsets (type=null, term,
+                                key, alias) {
+
+  }
+  
+  syntaxSequenceTypes (type=null, term,
+                             key, alias) {
+    switch (alias[op]) {
+      case ("oneOff"):
         break;
 
-      case ("expression"):
+      case ("continuous"):
+        break;
+    }
+  }
+
+  syntaxModifiers (type=null, term,
+                         key, alias) {
+    switch (alias[op]) {
+      case ("variation"):
         break;
 
-      //    hype (modifier)
+      case ("modifer"):
+        break;
+
+      case ("insert"):
+        break;
+
+      case ("transition"):
+        break;
+
+      case ("reposition"):
+        break;
+    }
+  }
+  
+  syntaxPhases (type=null, term,
+                      key, alias) {
+    switch (alias[op]) {
+      case ("trigger"):
+        break;
+
+      case ("start"):
+        break;
+
+      case ("mid"):
+        break;
+
+      case ("end"):
+        break;
+
+      case ("repetition"):
+        break;
+    }
+  }
+
+  syntaxHype (type=null, term,
+                    key, alias) {
+    switch (alias[term]) {
       case ("velocity"):
         break;
 
@@ -530,15 +857,23 @@ function parseTextLiteral (str) {
 
       case ("freeze"):
         break;
+    }
+  }
 
-      //    turns
+  syntaxTurns (type=null, term,
+                     key, alias) {
+    switch (alias[term]) {
       case ("frontside"):
         break;
 
       case ("backside"):
         break;
+    }
+  }
 
-      //    sides
+  syntaxSides (type=null, term,
+                     key, alias) {
+    switch (alias[term]) {
       case ("front"):
         break;
 
@@ -550,124 +885,189 @@ function parseTextLiteral (str) {
 
       case ("right"):
         break;
-
-    }   this.reOpStack.lastIndex
-      = this.reSpace.lastIndex;
-       //////////////////////////
-        this.reSpace.lastIndex=0   }
-
-     //////////////////////////
-    //  matched opcode symbol
-    switch (alias[op]) {
-      //    keyboard profile
-      case (key.A):
-        break;
-
-      case (key.B):
-        break;
-
-      case (key.select):
-        break;
-
-      case (key.return):
-        break;
-
-      //    syntax
-      case (key.default):
-        break;
-
-      case (key.expression):
-        break;
-
-      //    sequence types
-      case (key.oneOff):
-        break;
-
-      case (key.continuous):
-        break;
-
-      //    modifiers
-      case (key.variation):
-        break;
-
-      case (key.modifer):
-        break;
-
-      case (key.insert):
-        break;
-
-      case (key.transition):
-        break;
-
-      case (key.reposition):
-        break;
-
-      //    phases
-      case (key.trigger):
-        break;
-
-      case (key.start):
-        break;
-
-      case (key.mid):
-        break;
-
-      case (key.mid):
-        break;
-
-      case (key.repetition):
-        break;
     }
-  }   this.reOpStack.lastIndex=0;  // ...
-   /////////////////////////////////
-  //  this.out(node.literal);
-}
-
-function render (ast) {
-  var walker = ast.walker(),
-      event,
-      type;
-
-  this.buffer = "";
-  this.lastOut = "\n";
-
-  while (event = walker.next()) {
-      type = event.node.type;
-
-      this.plugin(event);
-
-      if (this[type])
-          this[type](event.node,
-                     event.entering);
   }
 
-  return this.buffer;
-}
+  syntaxAliases (type=null, term,
+                       key, alias) {
+    // how to do this first
+  }
 
-function attrs (node) {
-    var att = [];
-    if (this.options.sourcepos) {
-        var pos = node.sourcepos;
-        if (pos) {
-            att.push([
-                "data-sourcepos",
-                String(pos[0][0]) +
-                    ":" +
-                    String(pos[0][1]) +
-                    "-" +
-                    String(pos[1][0]) +
-                    ":" +
-                    String(pos[1][1])
-            ]);
-        }
+  switchRx (rx) {
+         rx.lastIndex = this.rx.lastIndex;
+    this.rx.lastIndex = 0;
+    this.rx = rx;
+  }
+
+  next() {
+    let resume = this.walker.current; 
+    let  event = this.walker.next();
+    if (!event) return;
+    let  type  =
+         event && event.node && event.node.type;
+
+    this.writer[type](event.node,
+                      event.entering);
+
+    switch (type) {
+      case ("text"):
+      case ("code"):
+        this.rx.lastIndex=0;
+        return [type, event.node.literal];
+
+      case ("linebreak"):
+      case ("softbreak"):
+        return [type];
+
+      case ("link"):
+        if (!entering)
+        break;
+
+        this.rx.lastIndex=0;
+        var literal = node.title;
+                  /// node.destination
+      
+              event = this.next();
+        this.writer[type](event.node,
+                          event.entering);
+
+        return [type, event.node.literal];
+
+      case ("heading"):
+        this.walker.resumeAt(resume);
+        return;
+
+      default:
+       return;
     }
-    return att;
+  }
+
+  ahead = function (param=true, param2=false) {
+
+   //   sets cache array at index 0
+   //   sets cache object at index 1
+   //
+   //   adds strings and numbers to cache array
+   //   assigns objects to cache object
+   //
+   //   skips matched ops on param.length>0
+   //                       && str.length=0
+   //
+   //   clears the cache                (true)
+   //   clears the cache, doesn't step (false)
+
+    var skip, {ahead, rx}=this;
+   /////
+    if (param !== true)
+    switch (typeof param) {
+      case ("boolean"):
+        //  clears the cache, doesn't step
+        if (param === false)
+            ahead[0].length=0,
+            ahead[1] = {};
+
+        if (typeof param2 === "object"
+        &&        !param2.length) 
+            Object.assign(ahead[1], param2);
+        return;
+        break;
+
+      case ("object"):
+        //  clears the cache
+        if (param === null)
+            ahead[0].length=0,
+            ahead[1] = {};
+
+        else
+        //  assigns objects to cache object
+        if (param.constructor.name === "Object")
+            Object.assign(ahead[1], param);
+
+        //  skips certain ops when str.length=0
+        else
+        if (param.length > 0)
+            ahead.skip = skip = param;
+        break;
+
+      case ("string"):
+      case ("number"):
+        //  add strings and numbers to cache
+        if (!param2)
+             ahead[0].push(param);
+        else
+        if (typeof param2 === "string"
+        ||  typeof param2 === "number")
+            ahead[0].splice(-1,0,param,param2);
+        else
+        if (typeof param2 === "object") {
+            ahead[0].push(param);
+            Object.assign(ahead[1], param);
+        }
+        break;
+
+      default:
+        if (ahead.skip)
+            skip = ahead.skip;
+    }
+
+    if ((match = rx(str)) === null)
+    return this.next();
+
+    [op] = match;
+    term = str.substring(match.index,
+                     (index=rx.lastIndex));
+
+    // decodeEntity();
+
+    if (!skip) {
+   ////
+    if (typeof param2 !== "undefined") {
+    if (typeof param2 === "object"
+    &&         param2.length)
+        skip = ahead.skip = param2;
+    else
+    if (typeof arguments[2] === "object"
+    &&         arguments[2].length)
+        skip = ahead.skip = arguments[2];
+    }}
+
+    if (skip 
+    &&  skip.indexOf(op) !== -1) {
+   ////
+    if ((match = rx.exec(xml)) === null)
+    return null;
+
+    // decodeEntity();
+
+    if (str.length > 0
+    && (rx.lastIndex - match[0].length) > 0)
+        rx.lastIndex = index;
+    else {
+      [op] = match;
+      term = str.substring(match.index,
+                       (index=rx.lastIndex));
+    }}
+
+    //  clears the cache, doesn't step
+    if (param === false) {
+        ahead[0].length=0,
+        ahead[1] = {};
+
+        return [term,op];
+    }
+    else
+    if (param)
+    Object.assign(ahead[0], param);
+
+    return [type, term, op];
+  }
 }
 
 function getConfigDefaults__en () {
+  let preparsedObj = [];
   let moveSequences = [];
 
-  let sections = [
+  let sections = [ 
   ["h1", "keyboardProfile", "Keyboard profile"],
   ["h1", "sequences", "Move sequences"],
   ["h2", "addSequence", "[Add new sequence](javascript:newSequence)"],
@@ -705,7 +1105,7 @@ function getConfigDefaults__en () {
            modifer: [".", "modifer"],
             insert: ["&", "insert"],
         transition: ["-", "transition"],
-        reposition: [">", "reposition"],
+        reposition: [">", "r position"],
       },
       phases: {
            trigger: ["*", "trigger"],
@@ -732,12 +1132,8 @@ function getConfigDefaults__en () {
     __optional: ["default","expression"],
   };
 
-  let [ inverted, flattened ]
-        = preparseConfigObj(mappings);
-
-  return [moveSequences, sections, mappings,
-                                   inverted,
-                                  flattened];
+  return [preparsedObj,
+         moveSequences, sections, mappings];
 
 //  # CommonMark extension syntax directives
 //    … status of implementation might differ
@@ -766,65 +1162,59 @@ function getConfigDefaults__en () {
 
 }
 
-function preparseConfigObj (cfg) {
-  let inverted={}, flattened={};
+////////////////////////////////////////////////
 
+function preparseConfigObj (cfg) {
+  jsonion.cur = "preparseConfigObj";
+
+  var result={}, _result;
+ /////
   for (var [cat,obj] of Object.entries(cfg)) {
     if (cat[0] === "_")
     continue;
 
-    for (var [key,alias] of Object.entries(obj)) {
+    result[cat] = [{/* flatten */},
+                   {/* invert */}],
+   _result = result[cat];
+
+    for (let [key,alias] of Object.entries(obj)) {
       if (cat === "sequenceTypes"
-      &&  cat === "modifiers"
-      &&  cat === "phases")  {
+      ||  cat === "modifiers"
+      ||  cat === "phases")  {
       if (typeof alias === "string") {
-          err.TYPE(false, cat, key, alias);
+          jsonion.err.TYPE(false,
+                       cat, key, alias);
           continue;
       }}
       else
       if (!alias instanceof Array) {
-          err.TYPE(false, cat, key, alias);
+          jsonion.err.TYPE(false,
+                       cat, key, alias);
           continue;
       }
 
-      flatten(cat, obj); // ... //
-      invert(cat, obj);
+      flatten(key, alias);
+       invert(alias, key);
     }
   }
 
-  return [inverted, flattened];
+  return result;
  ///////////////////////////////
 
-  function flatten () {
-    if (typeof alias === "string") {
-    if (flattened[key])
-        flattened[key].push([ cat, alias ]);
-    else
-        flattened[key] = [[ cat, alias ]];
-    }
-    else
-    if (typeof alias[0] === "string") {
-    if (flattened[key])
-        flattened[key].push([ cat, alias[0] ]);
-    else
-        flattened[key] = [[ cat, alias[0] ]];
-    }
+  function flatten (key, alias) {
+  if (typeof alias === "string")
+     _result[0][key] = alias;
+  else
+  if (typeof alias[0] === "string")
+     _result[0][key] = alias[0];
   }
 
-  function invert () {
-    if (typeof alias === "string") {
-    if (inverted[alias])
-        inverted[alias].push([ alias, cat ]);
-    else
-        inverted[alias] = [[ key, cat ]];
-    }
-    else
-    if (typeof alias[0] === "string") {
-    if (inverted[alias[0]])
-        inverted[alias[0]].push([ key, cat ]);
-    else
-        inverted[alias[0]] = [[ key, cat ]];
-    }
+  function invert (alias, key) {
+  if (typeof alias === "string")
+     _result[1][alias] = key;
+  else
+  if (typeof alias[0] === "string")
+     _result[1][alias[0]] = key;
   }
 }
 
@@ -891,17 +1281,15 @@ function diff (text, mod) {
 ////////////////////////////////////////////////
 
 function validateConfig (cfg) {
-  let [sections, mappings, moveSequences]
+  let [__, sections, mappings, moveSequences]
     = jstr.getConfigDefaults();
 
   var err = jsonion.err;
   var errCount = err.length;
-   jsonion.cur = "validateConfig"; 
+// jsonion.cur = "validateConfig"; 
 
   if (typeof cfg !== "object") {
       err.INPUT(false, "cfg");
-
-      console.log(err);
       return false;
   }
 
@@ -1152,7 +1540,7 @@ function validateConfig (cfg) {
 // to-do: syntax improvement (recurring chars)
 function rxFromArray (rxStack,
                       errorMap = jsonion.err) {
-  errorMap.cur = "rxFromArray";
+  jsonion.cur = "rxFromArray";
 
   if (rxStack instanceof RegExp)
   return rxStack;
@@ -1203,7 +1591,7 @@ function rxFromArray (rxStack,
           prev.push(str);
       }   continue   }
 
-      new errorMap.TYPE(expr);
+      errorMap.TYPE(expr);
       break;
 
     case ("function"):
@@ -1234,7 +1622,7 @@ function rxFromArray (rxStack,
                typeof str === "string"))
            prev = bfr;
        else
-           errorMap.OUTPUT(false, expr, bfr);
+           jsonion.err.OUTPUT(false, expr, bfr);
        }
 
        if (typeof rxStack[i+1] === "function")
@@ -1242,7 +1630,7 @@ function rxFromArray (rxStack,
        else break;
        ///////
       } while (0b1) }
-        catch (err) { errorMap.MISCONFIG(err) }
+        catch (err) { jsonion.err.MISCONFIG(err) }
 
       if (typeof prev === "string")
           res.splice(i-len, len, prev),
@@ -1313,7 +1701,7 @@ function rxFromArray (rxStack,
     try {
       return new RegExp(`(?:${str.join("|")})`,"g");
     } catch (e) {
-      new errorMap.FORMAT(str);
+      new jsonion.err.FORMAT(str);
     }
   }
 }
@@ -1322,8 +1710,7 @@ function encodeRxSpecialChars (arrayOfStrings) {
   if (!arrayOfStrings instanceof Array)
   return;
   
-  console.log(arrayOfStrings);
-  let rxSet = /(?:\[|\]|\.)/g; // ...
+  let rxSet = /(?:\[|\]|\.|\*)/g; // ...
   let replacer
     = Object.fromEntries(
        rxSet.source
@@ -1389,32 +1776,654 @@ Object.defineProperty(jstr.rx, "opStack", {
 });
 }
 
- ///////////////////////////////////////////////
-// function executableErrorMap (errorTypes) {}
+ //////////////////////////////
+//  submitting error reports
+class ErrorMap extends Array {
+callstack = new Array();
+constructor (errorTypes,
+                   args={reportArgValue:null,
+                         reportArgDepth:null},
+                               errorMap=null) {
+ /////
+  if (errorMap instanceof ErrorMap) {
+      super(...errorMap);
+  if (errorMap.callstack instanceof Array)
+      this.callstack.concat(errorMap.callstack),
+      this.callstack.filter((row, idx, self) =>
+      idx === self.findIndex(compare =>
+              compare.every((str,i) =>
+                      str == row[i])));
+  }
+  else
+  if (errorMap instanceof Array)
+      super(...errorMap);
+
+      else
+      super();
+
+  if (!errorTypes instanceof Object)
+  return;
+
+  if (args instanceof Object === false)
+      args = {};
+
+  let _cfg =
+     (typeof jsonion === "object"
+          && jsonion.err)  ||  {};
+
+  this.reportArgValue
+   =  (typeof args.reportArgValue === "boolean")
+   ?          args.reportArgValue
+   :  (typeof _cfg.reportArgValue === "boolean")
+   ?          _cfg.reportArgValue
+   :  false;
+
+  this.reportArgDepth
+   =  (typeof args.reportArgDepth === "number")
+   ?          args.reportArgDepth
+   :  (typeof _cfg.reportArgDepth === "number")
+   ?          _cfg.reportArgDepth
+   :  -1;
+
+  var jsonionCfg;
+ /////
+  if (errorTypes === _cfg)
+       jsonionCfg = this;
+  else jsonionCfg = null;
+
+   /////////////////////////////////////////////
+  //  transform error messages to functions
+  var label, throws, depth=1;
+ ///////
+  const TYPES
+      = ErrorMap.evalConsoleMsgTypes(false);
+
+  Object.entries(errorTypes)
+        .forEach(([key,str]) => {
+  if (typeof str === "string") {
+  this[key]=function executableErrorType(...msg) {
+      depth=0;
+      label=0;
+
+       /////////////////////////////////////////
+      //  clear console method and throw
+      var consoleMethod;
+     /////
+      if (msg[0] === false) {
+          msg.shift();
+
+          consoleMethod = "error";
+          throws = true;
+      }
+      else
+      if (TYPES.indexOf(msg[0]) !== -1) {
+          consoleMethod = msg.shift();
+      if (consoleMethod[0] !== consoleMethod[0]
+                              .toLowerCase())
+          consoleMethod
+        = consoleMethod.toLowerCase();
+      } 
+      else
+      consoleMethod = "error";
+
+       /////////////////////////////////////////
+      //  eval arg format
+      for (var j,i=0; i<msg.length; i++) {
+        if (j
+        || (typeof msg[i] !== "string"
+        && (j = 1))) {
+            msg[i] = [evalArg(msg[i])];
+        if (msg[i].length === 1
+        &&  msg[i][0] instanceof Array)
+            msg[i]
+          = msg[i][0];
+      }}
+
+       /////////////////////////////////////////
+      //  add to error map
+      this.push([key,
+     (!msg.length) ? str : `${str}:`, ...msg]);
+
+       /////////////////////////////////////////
+      //  current callstack map entry
+      if (this.callstack.length)
+          label = ErrorMap
+         .processCallstackEntry(this.callstack);
+
+       /////////////////////////////////////////
+      //  resolve throw and emit message
+      if (throws)
+          this.at(-1).unshift(false);
+
+          ErrorMap.consoleMsg(this.at(-1),
+                   consoleMethod, label);
+
+       /////////////////////////////////////////
+      //  append callstack entry to errorMap
+      if (label)
+          this.at(-1).unshift(label);
+  }}
+  else
+  if (jsonionCfg)
+      this[key]=(!"function" && !"boolean")
+                || str;
+  });
+
+  if (jsonionCfg)
+      jsonion.err = this;
+
+  var instance = this,
+      rxFnName = jsonion.rx.fnName;
+  do {
+  //  current class method / function
+    instance._cur = new Array();
+    ErrorMap.defineCallstack(instance,
+                        this.callstack);
+
+    if (             jsonionCfg &&
+        instance === jsonion.err)
+         instance = jsonion;
+
+    else break;
+  } while (-1)
+
+  function evalArg (obj, key=null) {
+    depth++;
+
+    if (obj === null)
+        return null;
+
+    //  value may be omitted in error reports
+    if (this.reportArgValue
+    && (typeof obj === "string"
+    ||  typeof obj === "number"
+    ||  typeof obj === "boolean"))
+        return obj;
+
+    //  returns anonymous function source code 
+    if (typeof obj === "function") {
+    let fnc = `${obj}`;
+
+    if (!obj.prototype) {
+    if (this.reportArgValue)
+        return ["function (arrow)", fnc];
+    else
+        return ["function (arrow)"];
+    }
+
+    let fnCode = `${fnc}`;
+    let fnName = rxFnName.exec(fnCode);
+                 rxFnName.lastIndex=0;
+    if (fnName) {
+    if (fnName[2])
+        return [fnName[1], fnName[2]];
+    else
+    if (this.reportArgValue)
+        return ["function", fnCode];
+    else
+        return ["function"];
+    }}
+
+    var res;
+    //  anonymous thing
+    if (typeof obj !== "object") {
+    if (typeof obj.length !== "undefined"
+    ||         obj.length === 0)
+        res = [typeof obj, obj.length];
+    else
+        res = [typeof obj];
+    if (key)
+        res.splice(1,0, key);
+    }
+    else
+    //  key-value object entry, [value] as array
+    if (depth === 1
+    &&  obj    instanceof Array
+    &&  obj[1] instanceof Array
+    &&  obj.length    === 2
+    &&  obj[1].length === 1
+    && (typeof obj[0] === "string"
+    ||  typeof obj[0] === "number")) {
+        res = evalArg(obj[1][0], obj[0]);
+    if (res[2] instanceof Array)
+        res.shift();
+    }
+    else
+    //  handle error reporting on objects
+    if (typeof obj === "object") {
+        res = [obj.constructor.name];
+    if (key)
+        res.splice(1,0,key);
+    if (obj.length)
+        res.push(obj.length);
+    if (!!obj[Symbol.iterator]
+    && `${obj[Symbol.iterator]}`.substring(9,15)
+                                   === "values") {
+    if (depth <= this.reportArgDepth)
+    for (let val of obj) {
+         res.push(evalArg(val));
+    }}
+    else
+    if (Object.entries(obj).length)
+    for (let [key,val] of Object.entries(obj)) {
+         if (depth < this.reportArgDepth)
+         res.push(evalArg(val,key));
+
+         else
+         res.push(key);
+    }}
+
+    depth--;
+    return res;
+  }}
+
+  static defineCallstack (instance, callstack) {
+    if (typeof instance === "object"
+    &&         callstack instanceof Array) {
+               instance._cur = [];
+   ////
+
+    Object.defineProperty(instance, "cur", {
+      get: () => instance._cur
+              && instance._cur[0],
+      set: (fn) => {
+      var fnName;
+      let curMethod = instance._cur;
+          curMethod
+            .length = 0;
+
+      switch (typeof fn) {
+        case ("string"):
+          if (fn.length)
+              curMethod.push(fn);
+          break;
+
+        case ("function"):
+          if (fnName=rxFnName.exec(`${fn}`))
+              curMethod.push(fnName[2]),
+               rxFnName.lastIndex=0;
+          break;
+
+        case ("object"):
+          var objPath;
+
+          if (fn instanceof Array) {
+          if (typeof fn[0] === "object"
+          ||  typeof fn[0] === "function")
+              fnName=fn.shift();
+          if (fn.length
+          &&  fn.every(str => {
+          if ((typeof (str) == "string"))
+               return (str  ||  false)
+          }))
+               var objPath
+                 = fn;
+          }
+          else fnName
+                 = fn;
+
+          if (typeof fnName === "object")
+              curMethod.push(fnName.constructor
+                                   .name);
+          else
+          if (typeof   fnName === "function"
+          &&       !(rxFnName.lastIndex=0)
+          && (fnName=rxFnName.exec(`${fn}`)))
+              curMethod.push(fnName[2]);
+
+          if (objPath)
+              curMethod.concat(objPath);
+          break;
+
+        default:
+          instance._cur.length=0;
+      }
+
+      if (curMethod.length) {
+          ErrorMap.updateCallstack(curMethod,
+                                   callstack);
+      }
+
+      if (curMethod.length >= 1) {
+          curMethod.splice(0,
+            curMethod.length,
+            curMethod.join("."));
+      }
+      else (instance._cur.length=0);
+    }});
+    }
+  }
+
+  static updateCallstack (curMethod,
+                          callstack) {
+    if (!callstack instanceof Array)
+    return;
+
+    let index
+      = callstack.length &&
+        callstack
+       .findIndex((row) =>
+                   row.every((str,i) =>
+             curMethod[i] === str));
+
+    if (index !== false
+    &&  index !== -1)
+        callstack.push(callstack
+                       .splice(index,1));
+        else
+        callstack.push([...curMethod]);
+  }
+
+  static processCallstackEntry (callstack) {
+    if (typeof callstack !== "object"
+    ||        !callstack instanceof Array)
+    return;
+
+    var result = "";
+    var stack
+      = new Error().stack.trim()
+                         .split("\n")
+                         .reverse();
+        stack.splice(-2,2);  // omit this fnc
+
+
+    var bfr, clsFnXOR, scriptIdx, scriptSrc="",
+                               newScriptSrc;
+    let drops = {
+        _: ["console", "executableErrorType"],
+        1: ["window.onload", "setTimeout"],
+        2: ["EventListener"],
+    };  drops[1].includes = includes;
+        drops[2].includes = includes;
+         drops._.includes = includes;
+
+    //  drop first row
+    if (stack.length
+    &&  drops[1].includes(stack[0])) {
+        stack.shift();
+    }
+
+    //  drop second row
+    if (stack.length
+    &&  drops[2].includes(stack[0])) {
+        stack.shift();
+    }
+
+     ///////////////////////////////////////////
+    /*  [to-do] consider drop row rules
+  
+     -  two consequtive rows in callstack match
+     -  cur variable at ErrorMap.defineCallstack
+
+     */// --------------------------------------
+
+    var call;
+   /////
+    for (let i=0; i<stack.length; i++) {
+        call=stack[i];
+         bfr=call.indexOf("@");
+
+         clsFnXOR
+       = call.substring(0,bfr);
+
+     if (clsFnXOR
+        .substring(clsFnXOR.length-2) === "/<")
+         clsFnXOR
+       = clsFnXOR
+        .substring(0, clsFnXOR.length-2);
+
+         call 
+       = call.substring(bfr+1);
+
+         bfr
+       = call.split(":");
+
+         scriptIdx = bfr.splice(-2,2).join(":");
+      newScriptSrc = bfr.join(":");
+
+         if (scriptSrc !== newScriptSrc)
+             scriptSrc = newScriptSrc,
+             result += newScriptSrc + "\n";
+
+         //  drop on empty call value
+         if (clsFnXOR.length === 0) {
+             continue;
+         }
+         else
+         //  drop on match
+         if (drops["_"].includes(clsFnXOR)) {
+             continue;
+         }
+         else
+         //  drop if not found in callstackMap
+         if (callstack.length
+         && !callstack.find(row =>
+                   row.find(str =>
+               clsFnXOR === str))) {
+             continue;
+         }
+
+         result += clsFnXOR+":"+scriptIdx+"\n";
+    }
+
+    if (result === newScriptSrc.length+2)
+        result += clsFnXOR+":"+scriptIdx;
+
+    return [
+      result.trim(),
+        this.superscriptInt(scriptIdx
+                           .split(":")[0])
+    ];
+
+    function includes (str) {
+      if (!str.length)
+      return;
+
+      for (let compareRule of this) {
+       if (str.indexOf(compareRule) === 0)
+           return true;
+      }
+    }
+  }
+
+  static consoleMsg (params, type="log", 
+                            label=false) {
+    if (type[0] !== type[0].toLowerCase()) {
+        type
+      = type.toLowerCase();
+    }
+
+    var cfg, suppressThrow, throws;
+   /////
+    if (typeof jsonion !== "undefined")
+  { let {throws, suppress}=jsonion.err;
+    cfg={throws, suppress}
+    cfg.mode=jsonion.mode; } else cfg={};
+    
+    var superscriptIndex;
+   /////
+    switch (typeof label) {
+      case ("string"):
+        if (label.length)
+        console.groupEnd(), 
+        console.group(label);
+        break;
+
+      case ("number"):
+        superscriptIndex
+      = ErrorMap.superscriptInt(label);
+        break;
+
+      case ("object"):
+        if (label instanceof Array
+        &&  label.length === 2)
+        superscriptIndex = label[1],
+        console.groupEnd(),
+        console.group(label[0]);
+        break;
+
+      case ("boolean"):
+        if (label === false)
+        console.groupEnd();
+        break;
+    }
+
+    switch (type) {
+      case ("assert"):
+      case ("debug"):
+      case ("dir"):
+      case ("dirxml"):
+      case ("info"):
+      case ("log"):
+      case ("table"):
+      case ("timeLog"):
+      case ("timestamp"):
+      case ("warn"):
+      case ("trace"):
+        if (cfg.mode !== "production"
+        && !cfg.suppress
+        ||  cfg.suppress instanceof Array
+        &&  cfg.suppress.indexOf(type) === -1) {
+        if (superscriptIndex)
+            console[type](superscriptIndex,
+                                 ...params);
+            else
+            console[type](...params);
+        }
+        break;
+
+      case ("error"):
+        suppressThrow =
+           (cfg.throws === false)
+        || (cfg.suppress instanceof Array 
+        &&  cfg.suppress.indexOf("throw") >= 0);
+
+        if (params[0] === false)
+            throws
+         = !params.shift();
+
+        if (!suppressThrow
+        &&   throws) throw params;
+        else {
+        if (superscriptIndex)
+            console.error(superscriptIndex,
+                                 ...params);
+            else
+            console.error(...params);
+        }
+        break;
+    }
+  }
+
+  static _GLOBAL = 
+  (typeof window === "object") ? window :
+  (typeof global === "object") ? global :
+  (typeof  self  === "object") ?  self  : null;
+
+  static evalConsoleMsgTypes(assign=true) {
+    const _SCOPE = this._GLOBAL;
+    const methodTypes = [
+         "assert",
+         "debug",
+         "dir",
+         "dirxml",
+         "info",
+         "log",
+         "table",
+         "timeLog",
+         "timestamp",
+         "warn",
+         "trace"
+    ];
+
+    var TYPE, fnName, i;
+    for (i=methodTypes.length-1; i>=0; i--) {
+    fnName=methodTypes[i];
+           methodTypes.push
+     (TYPE=fnName.toUpperCase());
+
+      if (assign) {
+      if (typeof _SCOPE[TYPE] === "undefined")
+                 _SCOPE[TYPE] = fnName;
+          else
+          console.warn(`Cannot assign ${TYPE} to global scope:`, this._GLOBAL);
+      }
+    }
+
+    return methodTypes;
+  }
+
+  static superscriptInt (number) {
+        number = parseInt(number);
+    if (!Number.isInteger(number))
+    return;
+
+    var result="";
+   /////
+    for (let chr of `${number}`) {
+      switch (chr) {
+        case ("1"): result += "¹"; break;
+        case ("2"): result += "²"; break;
+        case ("3"): result += "³"; break;
+        case ("4"): result += "⁴"; break;
+        case ("5"): result += "⁵"; break;
+        case ("6"): result += "⁶"; break;
+        case ("7"): result += "⁷"; break;
+        case ("8"): result += "⁸"; break;
+        case ("9"): result += "⁹"; break;
+        case ("0"): result += "⁰"; break;
+        case ("-"): result += "ᐨ"; break;
+      }
+    }
+
+    return result;
+  }
+}
+
+function makeExecutableErrorMap (errorTypes,
+                  args={reportArgValue:null,
+                        reportArgDepth:null},
+                              errorMap=null) {
+     let instance =
+     new ErrorMap(arguments[0],
+                  arguments[1],
+                  arguments[2]);
+  return instance;
+}
 
 function consoleLog (...params) {
-  if (typeof jsonion      === "undefined"
-  || (typeof jsonion.mode === "undefined"
-  ||         jsonion.mode !== "production")
-  && (!jsonion.err
-  ||  !jsonion.err.suppress))
-  console.log(...params);
+  let stack = new Error().stack.trim().split("\n");
+      stack.shift();
+  if (stack[0].indexOf("Array.prototype") === 0)
+      stack.shift();
+  return console.log(ErrorMap.superscriptInt(stack[0].split(":").slice(-2)[0]), ...params);
 
-  return params;
+  ErrorMap.superscriptInt()
+  ErrorMap.consoleMsg(params, "log",
+    ErrorMap.processCallstackEntry(jsonion.err.callstack));
+}
+
+function consoleTrace (...params) {
+  let stack = new Error().stack.trim().split("\n");
+      stack.shift();
+  if (stack[0].indexOf("Array.prototype") === 0)
+      stack.shift();
+  return console.log(ErrorMap.superscriptInt(stack[0].split(":").slice(-2)[0]), ...params);
+
+  ErrorMap.consoleMsg(params, "trace",
+    ErrorMap.processCallstackEntry(jsonion.err.callstack));
+}
+
+function consoleWarn (...params) {
+  ErrorMap.consoleMsg(params, "warn",
+    ErrorMap.processCallstackEntry(jsonion.err.callstack));
 }
 
 function consoleError (...params) {
-  var throws;
-  if (params[0] === false)
-      throws = !params.shift();
-
-  if (typeof jsonion      === "undefined"
-  || (typeof jsonion.mode === "undefined"
-  ||         jsonion.mode !== "production")
-  && (!jsonion.err
-  ||  !jsonion.err.suppress))
-  console.trace(...params);
-
-  if (throws) throw ".";
-  return params;
+  ErrorMap.consoleMsg(params , "error",
+    ErrorMap.processCallstackEntry(jsonion.err.callstack));
 }
+
+</script>
+</head>
+</html>
