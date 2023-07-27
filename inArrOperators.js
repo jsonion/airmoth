@@ -1,6 +1,6 @@
 if (typeof require === "function") {
 if (typeof ArrayWrapper === "undefined")
-     const ArrayWrapper = require("./ArrayWrapper.js");
+       var ArrayWrapper = require("./ArrayWrapper.js");
 }
 
 
@@ -48,9 +48,23 @@ function sourceInterface (ref) {}
 
  */
 
-class inArrayType extends Array {
-  static opcodeTypeMap = [];
 
+class CustomType extends inArrayType {
+  static determineFnClass() {
+    return [1, "CustomType", this.constructorFn,
+                             this.validatorFn,
+                             undefined || Object];
+  }
+
+  static constructorFn(){}
+  static validatorFn(){}
+
+}
+
+
+ ///////////////////////////////////////////////
+// type, requirement, transformer, flag, getter
+class inArrayType extends Array {
   static synonymsTypes = new Object({
     type:['collection','table'],
 
@@ -100,33 +114,67 @@ class inArrayType extends Array {
   }); /// requirement 
 
   static requirementRenderPriorityDefault
-         ///  assign .priority rank to reqs
+      /// assign .priority rank to reqs
 
   static synonymsTransformersAll = new Object({
     autoVal:['autoValue','default'],
-    trimFn:"trim",
+     trimFn:['trim'],
   });
+
+  static transformerRenderPriorityDefault
+      /// assign .priority rank to transforms
+
+  static synonymsFlags = new Object({
+  __array:['fullMatch','matchArray',
+           'staticArrayOrder',
+            'fixedArrayOrder'],
+
+  __allOf:['matchAll',
+   'allOf'],
+
+  __anyOf:['partialMatch','match','matchAny',
+   'anyOf','pick','__pick'],
+
+  __oneOf:['matchType','firstArrayMatch',
+   'oneOf','find','__find'],
+
+  __index:['makeIndex','indexKey',
+   'index','makeIndexEntry'],
+  });
+
+   ////////////////////////////////
+  // flag: opcode | default (orly?)
+  static __array; __array = true;
+  static __allOf; __allOf = false;
+  static __anyOf; __anyOf = false;
+  static __oneOf; __oneOf = false;
+  static __index; __index = false;
 
    ////////////////////////////////////////////
   //  runtime register of operators in array
-  static registerOperator (opCode, validatorFn) {
-    if (typeof opCode      !==  "number"
-    &&  typeof validatorFn !== "function")
-        return;
+  static registerOperator (TYPE_CLASS) {
+    if (TYPE_CLASS instanceof Array) {
+    var opCode    = TYPE_CLASS[1];
+    var TYPE_ENUM = TYPE_CLASS[0];
 
-    if (!this.opcodeTypeMap instanceof Array)
-         this.opcodeTypeMap = [];
-
-    let insertRowsCount
-      = opCode - this.opcodeTypeMap.length - 1;
-
-    if (insertRowsCount >= 0)
-    for (let i i < insertRowsCount; i++) {
-         this.opcodeTypeMap.push(undefined);
-    }    this.opcodeTypeMap.push(validatorFn);
-    else
-    this.opcodeTypeMap[opCode] = validatorFn;
+    if (typeof TYPE_ENUM === "number"
+    &&         TYPE_ENUM  >=  1
+    &&         TYPE_ENUM  <=  7
+    &&  typeof opCode === "number"
+    &&  !opcodeTypeMap[TYPE_ENUM][opCode])
+         opcodeTypeMap[TYPE_ENUM][opCode]
+                            = TYPE_CLASS;
+    }
   }
+
+  static opcodeTypeMap = {
+ //////////////////////// 
+    1: {}, 2: {},     // - type definition
+    3: {}, 4: {},    //  - requirement
+    5: {},          //   - transformer
+    6: {},         //    - flag
+    7: {},        //     - getter
+  };             /* … TYPE_ENUM categories */
 
    ///////////////////////////////////////
   //  pick some type evaluating methods
@@ -141,6 +189,8 @@ class inArrayType extends Array {
     ||  !pick instanceof Array
     ||  !pick.length)
     return {
+          flagOperator:
+     this.flagOperator,
           numericOperator:
      this.numericOperator,
           literalValueType: 
@@ -172,104 +222,183 @@ class inArrayType extends Array {
     return returnObj;
   }
 
-   /////////////////////////////////////////////
-  //  type, requirement & transformer wrapper
-  constructor (Name, opCode=null, ...schema) {
+    ////////////////////////////////////
+   //  top-level inArrayType endpoint
+  /*
+
+   1)  export uniform TYPE_CLASS wrapper
+   2)  construct schema definition in array
+
+  ///                                      */
+  constructor() {
+    var Name, TYPE_CLASS;
 
     ////////////////////////////////////////////
-   /////      exporting type wrapper      /////
-    if (typeof argument[0] !== "number"
-    &&        !schema instanceof Array) {
+   /////   exporting schema definition    /////
+    if (typeof arguments[0] === "string") {
+    var Name = arguments[0];
+   /////
+    var TYPE_CLASS,
+        NativeType;
 
-        let TYPE_CLASS
-          = inArrayType.determineFnClass(Name);
+       /////////////////////////////////////////
+      // ------------------------------------
+     //       main inArrayType library
+    // ------------------------------------
 
+    if (this.constructor === inArrayType) {
+        TYPE_CLASS
+      = inArrayType.determineFnClass(Name);
+
+    }
+    else
+
+       /////////////////////////////////////////
+      // ------------------------------------
+     //           class extension
+    // ------------------------------------
+
+    //  schema definition extends main class
+    if (this.determineFnClass) {
+        TYPE_CLASS
+      = this.determineFnClass(Name);
+
+    }
+    else
+    //  schema definition by lib nomenclature
+    if (this.constructor.determineFnClass) {
+        TYPE_CLASS
+      = this.constructor.determineFnClass(Name);
+
+    }{
         let NativeType
-          = TYPE_CLASS[5];
+         =  TYPE_CLASS[5];
 
         if (NativeType)
-            return [TYPE_CLASS, NativeType];
+            return [ TYPE_CLASS, NativeType ];
 
              else
-            return [TYPE_CLASS, undefined];
-    }
-    else {
+            return [ TYPE_CLASS, undefined  ];
+    }} /*///////////////////////////////////////
+
+
+                    •     •     •
+
+
+   *////////////////////////////////////////////
+   /////    invoking schema definition    /////
+    if (typeof arguments[0] === "object"
+    &&         arguments[0] instanceof Array) {
+    TYPE_CLASS=arguments[0];
+
+    if (inArrayType.getFnClass(TYPE_CLASS))
+               return super(...TYPE_CLASS);
+
+  }}
+
     ////////////////////////////////////////////
-   /////    type object being created …   /////
-
-            return super(Name, opCode,
-          /*//////*/        ...schema);
-
-    }
-  }
-
-    ////////////////////////////////////////////
-   //  enumerate inArrayType before exporting
+   //  enumerate schema definition to export
   /*
-       1,2        type definition
-        3          requirementFn
-        4          requirementRx
-        5          transformerFn
+       1,2               Type
+        3            requirement
+        4            requirementRx
+        5            transformerFn
+        6                flag
+        7              GetterFn
   ///                                         */
-  static determineFnClass (Name="") {
+  static determineFnClass (Name="", CLS=this) {
     var TYPE_CLASS;
 
     if (typeof arguments[0] === "string") {
-    const chrx=/([A-Z])([a-z])/;
+    const chrx=/(?:([A-Z])|([a-z])|(_))/;
     const opcodeTypeMap = this.opcodeTypeMap ||
-                         (this.opcodeTypeMap=[])
+                         (this.opcodeTypeMap={})
     const NativeTypeMap = this.NativeTypeMap ||
                          (this.NativeTypeMap
     /***  register synonym  ***/   = new Map());
-                          
-    var name, typeObjNative,
-      opCode, constructorFn,
+   ////////////////////////////
+
+    var name, typeObjNative, __name,
+      opCode, constructorFn, __function1__,
                 validatorFn,
-    priority, requirementFn,
+
+              requirementRx,
+    priority, requirementFn, __function2__,
               transformerFn;
 
        /////////////////////////////////////////
       // ------------------------------------
-     //     first evaluating data on type
+     //   schema definition by nomenclature
     // ------------------------------------
 
-            Name = arguments[0];
-    switch (Name) {
-      case ("RegExp"):
-      case ("regexp"):
-             name = "regexp";
-             Name = "RegExp";
-             break;
+       [ Name,
+         name,
+       __name ]=inArrayType
+               .resolveNativeType(arguments[0]);
 
-      case ("JSON"):
-      case ("json"):
-             name = "json";
-             Name = "JSON";
-             break;
+    if (!Name) {
+         Name = arguments[0];
 
-      default:
-         if (chrx = chrx.exec(Name)) {
-         if (chrx[2])
-             name = Name;
-             Name = name[0].toUpperCase()
-                  + name.substring(1);
-             else
-             name = Name[0].toLowerCase()
-                  + Name.substring(1);
-    }}
+    if (chrx = chrx.exec(Name)) {
+    //  function type 1
+    if (chrx[1])
+        name = Name[0].toLowerCase()
+             + Name.substring(1);
+    else
+    //  function type 2
+    if (chrx[2])
+        name = Name,
+        Name = name[0].toUpperCase()
+             + name.substring(1);
+    else
+    if (chrx[3])
+        name = Name,
+        Name = undefined;
+
+        else {   return   }
+    }}          ////////
     try
   { typeObjNative = eval(Name) } catch(e){/*…*/}
 
-    opCode        =   ////////////////////////
-                     /*  shared namespace
-                         ----------------  */
+    __function1__ = CLS[ Name ];
+    __function2__ = CLS[ name ];
+                                            ////
+    ///--/// fast track //////////////////////
+       if (__function1__.TYPE_CLASS
+                         instanceof Array)
+    return __function1__.TYPE_CLASS;
+       if (__function2__.TYPE_CLASS
+                         instanceof Array)
+    return __function2__.TYPE_CLASS;
+
+       if (__function2__ === true
+       ||  __function2__ === false
+       && (__function2__  =  CLS[ `${name}_` ])
+             instanceof Array)
+    return __function2__; /////////////////////
+    ///////////////////////                 ////
+
+    constructorFn = __function1__   &&
+     (validatorFn = CLS[ `${name}_` ]);
+
+           opCode =   /////////////////////////
+                     /*  shared namespaces
+                         -----------------  */
     transformerFn =
-    requirementFn = inArrayType[name];
+    requirementFn =
+    requirementRx =
 
-    constructorFn = inArrayType[Name];
-      validatorFn = inArrayType[Name+"_"];
+             flag = __function2__;
 
-       /////////////////////////////////////////
+         getterFn = __function1__;
+
+    /*//////////////////////////////////////////
+
+
+                    •     •     •
+
+
+      */////////////////////////////////////////
       // ------------------------------------
      //    type definition (and natives)
     // ------------------------------------
@@ -277,9 +406,6 @@ class inArrayType extends Array {
     if (typeof opCode         ===  "number"
     &&  typeof constructorFn  === "function"
     &&  typeof   validatorFn  === "function") {
-    if (opcodeTypeMap[opCode] !== validatorFn)
-        opcodeTypeMap[opCode]   = validatorFn;
-
     if (!typeObjNative
     ||  !NativeTypeMap.get(typeObjNative))
     TYPE_CLASS
@@ -295,11 +421,7 @@ class inArrayType extends Array {
     if (NativeTypeMap.get(typeObjNative
                       ===          true))
         NativeTypeMap.add(typeObjNative,
-                          constructorFn);
-     // NativeTypeMap.add(constructorFn,
-   ////                  typeObjNative);
-    //  NativeTypeMap.add(validatorFn,
-   ////                  typeObjNative);
+                             TYPE_CLASS);
     }
 
     if (!constructorFn.TYPE_CLASS
@@ -307,21 +429,28 @@ class inArrayType extends Array {
     ||    !validatorFn.TYPE_CLASS
                        instanceof Array)
          constructorFn.TYPE_CLASS
-                     = TYPE_CLASS;
+                     = TYPE_CLASS,
            validatorFn.TYPE_CLASS
                      = TYPE_CLASS;
     }
     else
+    if (!__function1__) {
 
        /////////////////////////////////////////
       // ------------------------------------
-     //    transformers and requirements
+     //     transformerFn and priority
     // ------------------------------------
 
     if (name.endsWith("Fn")
     &&  typeof transformerFn === "function") {
+        priority = transformerFn.priority;
+        priority = (Number.isInteger(priority))
+    &&  priority
+    ||  this.transformerRenderPriorityDefault
+    || -1;
+
     TYPE_CLASS
-  = [5, name, transformerFn];
+  = [5, name, transformerFn, priority];
 
     if (!transformerFn.TYPE_CLASS
                        instanceof Array)
@@ -329,190 +458,288 @@ class inArrayType extends Array {
                      = TYPE_CLASS;
     }
     else
-    if (typeof requirementFn ===  "object"
-    ||  typeof requirementFn === "function") {
-        priority = requirementFn.priority;
+
+       /////////////////////////////////////////
+      // ------------------------------------
+     //    requirement validator method
+    // ------------------------------------
+
+    if (typeof requirementFn === "function"
+    || (typeof requirementRx === "object"
+    &&         requirementRx instanceof RegExp)) {
+    let requirement
+     =  requirementFn || requirementRx;
+
+        priority = requirement.priority;
         priority = (Number.isInteger(priority))
-      ? priority
-      : this.requirementRenderPriorityDefault;
+    &&  priority
+    ||  this.requirementRenderPriorityDefault
+    || -2;
 
-    if (requirementFn instanceof RegExp)
     TYPE_CLASS
-  = [4, name, requirementFn, priority];
+  = [3, name, requirement, priority];
 
-    else
-    TYPE_CLASS
-  = [3, name, requirementFn, priority];
-
-    if (!requirementFn.TYPE_CLASS
-                       instanceof Array)
-         requirementFn.TYPE_CLASS
-                     = TYPE_CLASS;
+    if (!requirement.TYPE_CLASS
+                     instanceof Array)
+         requirement.TYPE_CLASS
+                   = TYPE_CLASS;
     }
+    else
+
+       /////////////////////////////////////////
+      // ------------------------------------
+     //      flags to query interpreter
+    // ------------------------------------
+
+    if (typeof flag === "boolean"
+    ||  typeof flag === "number") {
+
+    TYPE_CLASS
+  = [6, name, (flag)];
+
+    if (!this[ `${name}_` ] instanceof Array)
+         this[ `${name}_` ] = TYPE_CLASS;
+    }}
+    else
+
+       /////////////////////////////////////////
+      // ------------------------------------
+     //           GetterFn
+    // ------------------------------------
+
+    if (typeof getterFn === "function") {
+
+    TYPE_CLASS
+  = [7, Name, (getterFn)];
+
+    } /*////////////////////////////////////////
+  
+
+                    •     •     •
+
+
+    *///////////////////////////////////////////
+    //  fast-track TYPE_CLASS for runtime 
+    if (typeof opCode === "number"
+    &&  !opcodeTypeMap[TYPE_CLASS[0]][opCode])
+         opcodeTypeMap[TYPE_CLASS[0]][opCode]
+                     = TYPE_CLASS;
 
     if    (TYPE_CLASS)
     return TYPE_CLASS;
+        /*/////////////*/
 
     else
-    console.trace(`inArrayType ${Name} misconfig`);
+    console.trace(`inArrayType ${
+                    arguments[0]} misconfig`);
   }}
 
    /////////////////////////////////////////////
-  //  chain types, requirements and transforms
-  static bindChainKeys (TYPE_CLASS, exports) {
-                  // //
+  //  single type schema with fn input params
+  static bindExports (TYPE_CLASS, exports) {
+                 /* ˇ */
     let TYPE_ENUM   =   TYPE_CLASS[0];
+   /////
+    if (!Number.isInteger(TYPE_ENUM))
+    return;
 
-    var wrapTypeDefinitionFn, makeKeyFn,
+     ///////////////////////////////////////////
+    //  type, requirement            (wrapper)
+    if (TYPE_ENUM >= (1) && (3) >= TYPE_CLASS)
+    bindSchemaDefinition
+  = function inArrayTypeWrapper (...params) {
+      return inArrayType
+            .categorizeSchemaInputs(TYPE_CLASS,
+                                        params);
+    }
+    else
+
+     ///////////////////////////////////////////
+    //  requirement, transform, flag (wrapper)
+    if (TYPE_ENUM >= (4) && (6) >= TYPE_CLASS)
+    bindSchemaDefinition
+  = function inArrayTypeWrapper (...params) {
+      return inArrayType
+            .categorizeSchemaInputs(TYPE_CLASS,
+                                        params);
+    }
+
+    return bindSchemaDefinition;
+  }
+
+    ///////////////////////////////////////////
+   // fn chain predicate schema augmentation
+  /*  
+      flow description
+      ----------------
+
+      inArrayType.export(...typesAndSynonyms)
+   1) exporting a schema definition:
+      inArrayTypeWrapper method is returned to
+      accept "exports" object as bound context
+   …  every method in exports object is to be
+      assigned as subkey to each every other fn
+  
+      exports[type](...inputs)
+   2) triggering a schema definition:
+      inArrayTypeWrapper method calls to update
+      chain header (categorizing inputs by type)
+
+   …) processing schema inputs (independently):
+      inArrayTypeResults method to call each
+      type constructor in chain, supplying
+      all requirementFns, requirementRxs
+      and transformerFns, categorized
+      TypeMap object is used to resolve aliases
+
+  ///                                         */
+  static bindChainKeys (TYPE_CLASS, exports) {
+                 /* ˇ */
+    let TYPE_ENUM   =   TYPE_CLASS[0];
+   /////
+    if (!Number.isInteger(TYPE_ENUM))
+    return;
+
+    var schemaDefinitionBind;
+  { let wrapTypeDefinitionFn, makeKeyFn,
            wrapRequirementFn,
-           wrapTransformerFn;
+           wrapTransformerFn; }
+         /// symbolic blanks
 
      ///////////////////////////////////////////
-    //  type definition              (wrapper)
-    if (TYPE_ENUM === 1
-    ||  TYPE_ENUM === 2
-    //  exported method renders named key
-    ||  determineFnClass[2] === inArrayType.Key) {
-    let [ Name, opCode, constructorFn,
-           validatorFn, typeObjNative ]
-     /*///////////////////*/
-      = determineFnClass;
-
-        wrapTypeDefinitionFn
-      = function inArrayType (...inputs) {
-          return inArrayType
-         .call(this, TYPE_CLASS, params, () => {
-
-             //////////
-            //  ...
-
-          });
-    }}
+    //  type, requirement            (wrapper)
+    if (TYPE_ENUM >= (1) && (3) >= TYPE_CLASS
+    ||  TYPE_CLASS.at(2) === inArrayType.Key)
+    schemaDefinitionBind
+  = function inArrayTypeWrapper (...params) {
+      return inArrayType.makeChainedContext
+            .call(exports, TYPE_CLASS, params,
+                  function inArrayTypeResults() {
+                    return this /* … draft */;
+    })}
     else
 
      ///////////////////////////////////////////
-    //  requirementFn                (wrapper)
-    if (TYPE_ENUM === 3) {
-    let [ name, requirementFn, priority ];
-     /*///////////////////*/
-      = determineFnClass;
+    //  requirement, transform, flag (wrapper)
+    if (TYPE_ENUM >= (3) && (6) >= TYPE_CLASS)
+    schemaDefinitionBind
+  = function inArrayTypeWrapper (...params) {
+      return inArrayType.makeChainedContext
+            .call(exports, TYPE_CLASS, params);
+    }
 
-        wrapRequirementFn
-      = function inArrayRequirement (...inputs) {
-          return inArrayType
-         .call(this, TYPE_CLASS, params, () => {
+    return schemaDefinitionBind
+        || wrapTypeDefinitionFn
+        ||    wrapRequirementFn
+        ||    wrapTransformerFn  ||  makeKeyFn;
+  }
 
-             //////////
-            //  ...
+    ////////////////////////////////////////////
+   // chain exports (clone all types by all types)
+  /*
+   -  first callee fn's context comes externally
+   -  external exports are cloned upon first use
+   -  following types go to updateChainHeader
+  
+   …  must invoke with .call or .apply and
+      set "this" context to exports object
+  ///                                         */
+  static makeChainedContext (TYPE_CLASS,
+                                 params,
+                                 wrapFn,
+                                 exports=(this)) {
+    var test
+      = true;
 
-          });
-    }}
+    var chainHead;
+   /////
+    var Types, requirements, transformers;
+    var TypeMap; /// get fn keys after alias
+
+    //   test for chain header format
+    if  (!this instanceof Array
+    ||   !this.length === 4)
+          test = false;
+    else [Types, requirements,
+                 transformers, TypeMap]
+        = this;
+
+    if  (!Types instanceof Array
+    ||   !requirements instanceof Array
+    ||   !transformers instanceof Array
+    ||   !TypeMap instanceof Map)
+          test = false;
+
+    //   first method in chain
+    if  (test === false) {
+    //  attach inputs to header
+    chainHead = inArrayType
+   .categorizeSchemaInputs.call(this,
+                          TYPE_CLASS, params);  
+
+    //  assign exports to chain header
+    for (let [TYPE_1, fn_1] of Object
+                              .entries(exports)) {
+    if  (fn_1 instanceof Function) {
+    chainHead[TYPE_1]=fn_1.bind(chainHead);
+    for (let [TYPE_2, fn_2] of Object
+                              .entries(exports)) {
+    if  (fn_2 instanceof Function
+    &&   fn_1 !== fn_2)
+         chainHead[TYPE_1][TYPE_2]
+                = fn_2.bind(chainHead);
+    }}}}
     else
+    chainHead = inArrayType
+   .updateChainHeader.call(this,
+                     TYPE_CLASS, params);
 
-     ///////////////////////////////////////////
-    //  requirementRx                (wrapper)
-    if (TYPE_ENUM === 4) {
-    let [ name, requirementRx, priority ];
-     /*///////////////////*/
-      = determineFnClass;
-
-        wrapRequirementFn
-      = function inArrayRequirementRx() {
-          return inArrayType
-         .call(this, TYPE_CLASS, null, () => {
-
-             //////////
-            //  ...
-
-          });
-    }}
-    else
-
-     ///////////////////////////////////////////
-    //  transformerFn                (wrapper)
-    if (TYPE_ENUM === 5) {
-    let [ transformerFn ]
-     /*///////////////////*/
-      = determineFnClass;
-
-        wrapTransformerFn
-      = function inArrayTransformer (...params) {
-          return inArrayType.assignChainHeader
-         .call(this, TYPE_CLASS, params, () => {
-
-             //////////
-            //  ...
-
-          });
-    }}  else return;
-
-    return wrapTypeDefinitionFn
-           || wrapRequirementFn
-           || wrapTransformerFn  ||  makeKeyFn;
+ /*////////////////////*/
+    return chainHead;
   }
 
     ////////////////////////////////////////////
    // properties to apply to chained methods
   /*
-   -  chain header aggregates all chained inputs
-   -  type constructors are invoked 
+   -  first callee fn sets chain header
+   -  chain header aggregates all chained params
+   …  query parser invokes chained types
 
-   -  first callee fn's context comes externally
-   -  external exports are cloned upon first use
   ///                                         */
-  static assignChainHeader (TYPE_CLASS, inputs,
-                                fnWrap,
+  static updateChainHeader (TYPE_CLASS,
+                                params,
+                              ///////////
                                 header = (this)) {
-    let test
-     = !true;
- /*///////////*/
-    let TYPE_ENUM = TYPE_CLASS[0];
+    let TYPE_ENUM
+     =  TYPE_CLASS[0];
 
-    var TypeMap; // get fn keys after alias
-   /////
-    let [Types, requirements, transformers]
-     =   inArrayType.categorizeSchemaInputs(TYPE_CLASS,
-                                     inputs);
+    //  process schema params 
+    let [Types_, requirements_, transformers_]
+     =  inArrayType
+       .categorizeSchemaInputs.call(this,
+                              TYPE_CLASS,
+                                  params);
 
-    if (header instanceof Array) {
+    //  test for chain header format
+    if  (!header instanceof Array
+    ||   !header.length === 4)
+          header = new Array(4);
+    else [Types, requirements,
+                 transformers, TypeMap]
+        = header;
 
-    if (Types instanceof Array
-    &&  requirements instanceof Array
-    &&  transformers instanceof Array)
+    //  set chain header variables
+    header[0]
+  = Types.concat(Types_);
 
-    }
+    header[1]
+  = requirements.concat(requirements_);
 
-    //  clone properties to chain header
-    if (!header instanceof Array
-    ||   header.length !== 4
-    ||   header.
-         TypeMap = new Map(),
-         inChain = [Types, requirements,
-                           transformers,
-                                TypeMap],
-          header =
-          Object.assign(inChain, header);
+    header[2]
+  = transformers.concat(transformers_);
 
-    //   validate format
-    else inChain = exports[0],
-         TypeMap = exports[1];
-
-    if (inChain instanceof Object)
-    var {Types, requirements,
-                transformers}=inChain;
-
-    if (!Types instanceof Array
-    ||  !requirements instanceof Array
-    ||  !transformers instanceof Array)
-         inChain.Types = [],
-         inChain.requirements = [],
-         inChain.transformers = [];
-
-    if (!TypeMap instanceof Map)
-         exports[1]  =  new Map();
-
- /*/////////////////*/
-    return exports;
+ /*////////////////*/
+    return header;
   }
 
     ////////////////////////////////////////////
@@ -521,46 +748,102 @@ class inArrayType extends Array {
    -  expect requirements as fns, or in Object
    -  interpret Objects as schema key mappings 
   ///                                         */
-  static categorizeSchemaInputs (TYPE_ENUM,
-                                    inputs) {
-    switch (TYPE_ENUM) {
-      case (1):
-      case (2):
-        /*  /////////////////////////
-            
-                 •    •    •
+  static categorizeSchemaInputs (TYPE_CLASS,
+                                     params) {
+    var Types=[];
+    var requirements=[];
+    var transformers=[];
 
-            /////////////////////////  */
-        break;
+    for (let term of params) {
+    switch (typeof term) {
+      case ("string"):
+      case ("object"):
+      case ("boolean"):
+      case ("function"):
+    }}
 
-      case (3):
-      case (4):
-        /*  /////////////////////////
-            
-                 •    •    •
-
-            /////////////////////////  */
-        break;
-
-      case (5):
-        /*  /////////////////////////
-
-                 •    •    •
-
-            /////////////////////////  */
-        break;
-    }
+    if (       Types.length
+    ||  requirements.length
+    ||  transformers.length)
+    return [Types, requirements,
+                   transformers];
   }
+
+   ////////////////////////////////////////////
+  //  recognize query types & extract config
+  static inspectQueryObjectSchema (object,
+                                  _models,
+                             staticArrayOrder,
+                              firstArrayMatch) {
+    if (!object instanceof Object
+    ||   !staticArrayOrder instanceof Array
+    ||    !firstArrayMatch instanceof Array)
+    return;
+
+    var iterator_;
+    var iterator = Object
+                  .entries(object);
+   /////
+    var staticOrderRule, staticArrayOrder_;
+    var  matchFirstRule,  firstArrayMatch_;
+
+    //  match static array order rule key
+    if (typeof staticArrayOrder[0] == "boolean")
+               staticArrayOrder_   =
+               staticArrayOrder.slice(1);
+         else  staticArrayOrder_   =
+               inArrayType.synonymsFlags.__array;
+
+    //  match oneOf array enum rule key
+    if (typeof firstArrayMatch[0] === "boolean")
+               firstArrayMatch_    =
+               firstArrayMatch.slice(1);
+         else  firstArrayMatch_    =
+               inArrayType.synonymsFlags.oneOf;
+
+  /*////////////////////////////////////////////
+
+    static synonymsFlags = new Object({
+    __array:['fullMatch','matchArray',
+             'staticArrayOrder',
+              'fixedArrayOrder'],
+
+    __allOf:['matchAll',
+     'allOf'],
+
+    __anyOf:['partialMatch','match','matchAny',
+     'anyOf','pick','__pick'],
+
+    __oneOf:['matchType','firstArrayMatch',
+     'oneOf','find','__find'],
+
+    __index:['makeIndex','indexKey',
+     'index','makeIndexEntry'],
+    });
+
+   *////////////////////////////////////////////
+  }
+
+   /////////////////////////////////////////////
+  //  recognize query types & extract config
+  static inspectQueryArraySchema (array,
+                                _models,
+                              fullMatchOrder,
+                             firstMatchOrder,
+                            staticMatchOrder) {}
 
    //////////////////////////////
   //  export type constructors
   static export (...assignTo) {
-    const exports={};
-
+    var exports={}, makeChainedMethods
+                                = true;
     assignTo
   = assignTo.filter(obj =>
-             typeof obj === "object"
-          && typeof obj === "function");
+             typeof obj === "object"   ||
+             typeof obj === "function" ||
+            (typeof obj === "boolean"
+            (makeChainedMethods = obj) &&
+                                false));
     assignTo.unshift(new inArrayType("Key"));
 
     var filterKeys, omitKeys,
@@ -644,7 +927,7 @@ class inArrayType extends Array {
 
                let binding = inArrayType
                   .bindChainKeys(TYPE_CLASS,
-                                    exports);
+                                    exports, makeChainedMethods);
 
                    exports[prop] /// chain types
                  = binding.bind(exports);
@@ -664,10 +947,6 @@ class inArrayType extends Array {
     }
 
     return assignTo[0];
-  }
-
-  static addTypeMapEntry () {
-
   }
 
   /*  "… on …"[ion]  ·  [on]"… in …"([o])  ·  [on]"… io …"[n]  #  jsOnIon, jsOnion, jsonIon, JSonIon, JSONIon, SONion
@@ -706,7 +985,7 @@ class inArrayType extends Array {
   static function                      
   
   static map                           
-  static set                           
+  static set;                         
 
   static symbol                        
   static error                         
@@ -870,7 +1149,12 @@ __free  = [];
   static mentions                      
 
   static citations                     
-  static externalReferences            
+  static externalReferences
+
+  /*           ---------------
+                 annotations              */
+  static highlights
+  static annotations
 
   /*         --------------------
                data derivatives           */
@@ -914,7 +1198,7 @@ __free  = [];
   /*              query system
               --------------------
                 query validation          */
-  static isQueryTerm                 = -0b0;
+  static isQueryTerm;
   static isMultiType;
 
   static isPredicate;
@@ -924,7 +1208,7 @@ __scope = [];
 __free  = [];
 
 
-  static Id (...inputs) {
+  static Id (...params) {
     var keys  = [];
     var Types = [],
       exports = this;
@@ -938,60 +1222,15 @@ __free  = [];
     for (let obj of inputs) {
     switch (typeof obj) {
       case ("string"):
-        keys.push(obj);
-        break;
-
       case ("object"):
-        if (obj === String
-        ||  obj === Number
-        ||  obj === BigInt) {
-        let shorthand
-            = exports.__typeMap.get(obj);
-
-        if (shorthand)
-            types.push(shorthand);
-        }
-        break;
     }}
-
-    if (!types.length)
-         Types = [];
   }
 
-  static Namespace = function (...inputs) {
+  static Namespace = function(){}  
 
-  }  
+  static Key = function(){}
 
-  static Key = function (...names) {
-    var keys = [];
-    var Type,
-     exports = this;
-
-    for (let key of names) {
-     if (typeof key !== "string")
-         continue;
-
-     //  check if key name matches type def
-     if (!Type
-     &&   typeof exports[key] === "function")
-          Type = exports[key];
-
-          keys.push(key);
-    }
-  }
-
-  static Value = function (...val) {
-    var vals = [];
-    switch (val) {
-      let res = inArrayType.evalType();
-    }
-  }
-
-  static extractObjectSchemaProps (obj, pre) {
-    for (let [key,val] of Object.entries(obj)) {
-     if () {}
-    }
-  }
+  static Value = function(){}
 
   static String (...schema) {
     var rx;
@@ -1009,19 +1248,11 @@ __free  = [];
       case ("Array"):
         if (res = this.regexSlotArray(obj)) 
              rx = res;
-        if ()
+             continue;
 
       case ("Object"):
-        if 
-
-      case ("object"):
-        if (obj.constructor.name === "Array") {
-        if (res = this.regexSlotArray(obj)) 
-             rx = res;
-
-        if (
-        &&  obj.length % 2 === 0)
-        }
+        if () {}
+           break;
     }
     else
     if (typeof obj === "boolean")
@@ -1033,18 +1264,7 @@ __free  = [];
     return str.trim();
   }
 
-  static JSON () {
-
-  }
-
-
-  static extractInputs (inputs) {
-    var rx;
-    var rxArray;
-
-    var numericArray1;
-    var numericArray2;
-  }
+  static JSON(){}
 
   static numericArray (enumLiteral) {
     try {
@@ -1064,26 +1284,6 @@ __free  = [];
     } catch (e) { throw e }
   }
 
-
-  [
-    void function numOpcode(){},
-    lowerBound, [max, min, ...], upperBound,
-    rx, fn, ![], !![],
-    autoVal
-  ];
-
-  [
-    void function strOpcode(){},
-    minLen, maxLen,
-    rx, fn, ![], !![],
-    autoVal
-  ];
-
-  [
-    void function boolean(){},
-    !!bool, autoVal,
-  ];
-
   static enumValueType (lit, 
             queryStage=0 || // parse query type
                   void 1 || // query live data
@@ -1095,11 +1295,16 @@ __free  = [];
         return void -0b01;
     }
     else
-    //  test for number operator
+    //  test for numeric operator
     if (lit.length === 2
     ||  lit.length === 3
-    &&  res === this.numberOperator(lit,
-                             queryStage))
+    && (res = this.numericOperator(lit,
+                            queryStage))) {
+        return res;
+    }
+    else
+    //  test for flag operator
+    if (res = this.flagOperator(lit)) 
         return res;
     }
 
@@ -1147,7 +1352,13 @@ __free  = [];
   }
 
    ////////////////////////////////
-  //  evaluate numeric operators
+  //  match flag operators
+  static flagOperator (enumLiteral) {
+    const oneOf;
+  }
+
+   ////////////////////////////////
+  //  match numeric operators
   static numericOperator (enumLiteral,
                            queryStage) {
     //  parse query type
@@ -1548,22 +1759,6 @@ __free  = [];
     return res;
   }
 
-
-  // ------------------------------------------
- //
-/*     Shorthand bindings for built-in types
-                                              
- */// -----------------------------------------
-  static NativeTypeMap = new Map([
- [Object,  [inArrayType.JSON]],
- [Array,    true],
- [Date,     true],
- [Number,   true],
- [String,   true],
- [RegExp,   true],
- [Boolean,  true],
- [Function, true]]);
-
     ////////////////////////////////////////////
    //  get exported inArrayType wrapper enum
   /*
@@ -1590,9 +1785,9 @@ __free  = [];
      //    dense disposition: wrapper enum
     // ------------------------------------
 
-    if (typeof TYPE_CLASS !== "object")   {
+    if (typeof TYPE_CLASS !== "object") {
     if (typeof constructorFn === "function") {
-        typeObjNative
+    let typeObjNative
       = NativeTypeMap.get(constructorFn);
 
     if (typeObjNative === true
@@ -1665,7 +1860,105 @@ __free  = [];
             return TYPE_CLASS;
         }
         break;
-    }}}
+    }}
+  }
+
+  // ------------------------------------------
+ //
+/*     Shorthand bindings for built-in types
+                                              
+ */// -----------------------------------------
+  static NativeTypeMap = new Map([
+ [Object,   true],
+ [Array,    true],
+ [Date,     true],
+ [Map,      true],
+ [Set,      true],
+ [WeakMap,  true],
+ [WeakSet,  true],
+ [Number,   true],
+ [String,   true],
+ [RegExp,   true],
+ [Boolean,  true],
+ [Function, true]]);
+
+  static resolveNativeType (name) {
+    var Name,
+      __name;
+
+    switch (name) {
+      case ("RegExp"):
+      case ("regexp"):
+             name = "regexp";
+             Name = "RegExp";
+           __name =["RegExp"];
+             break;
+
+      case ("regex"):
+      case ("Regex"):
+             name = "regex";
+             Name = "Regex";
+           __name =["RegExp"];
+
+      case ("JSON"):
+      case ("json"):
+             Name = "JSON";
+             name = "json";
+           __name =["JSON"];
+             break;
+
+      case ("Object"):
+      case ("object"):
+             Name = "Object";
+             name = "object";
+           __name =["JSON"];
+             break;
+
+      case ("WeakSet"):
+      case ("weakSet"):
+             Name = "WeakSet";
+             name = "weakSet";
+           __name =["WeakSet","Set"];
+             break;
+
+      case ("Weakset"):
+      case ("weakset"):
+             Name = "Weakset";
+             name = "weakset";
+           __name =["WeakSet","Set"];
+             break;
+
+      case ("WeakMap"):
+      case ("weakMap"):
+             Name = "WeakMap";
+             name = "weakMap";
+           __name =["WeakMap","Map"];
+             break;
+
+      case ("Weakmap"):
+      case ("weakmap"):
+             Name = "Weakmap";
+             name = "weakmap";
+           __name =["WeakMap","Map"];
+             break;
+
+      case ("DateTime"):
+      case ("dateTime"):
+             Name = "DateTime";
+             name = "dateTime";
+           __name =["Date"];
+             break;
+
+      case ("Timestamp"):
+      case ("timestamp"):
+             Name = "Timestamp";
+             name = "timestamp";
+           __name =["Date"];
+             break;
+    }
+
+    if (__name)
+    return [Name, name, __name];
   }
 
  /////////////////////////////////////////////
